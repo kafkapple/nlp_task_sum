@@ -18,20 +18,36 @@ class DialogueSummarizerConfig:
     tokenizer: TokenizerConfig
 
 class BartSummarizer(nn.Module):
-    def __init__(self, config: DialogueSummarizerConfig):
+    def __init__(self, config):
         super().__init__()
-        self.config = config
-        self.tokenizer = AutoTokenizer.from_pretrained(config.model_name)
-        self.model = BartForConditionalGeneration.from_pretrained(config.model_name)
+        self.config = config.model  # 모델 관련 설정
+        self.full_config = config   # 전체 설정
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        # Add special tokens
-        special_tokens_dict = {'additional_special_tokens': [str(token) for token in config.tokenizer.special_tokens.additional_special_tokens]}
-        self.tokenizer.add_special_tokens(special_tokens_dict)
-        self.model.resize_token_embeddings(len(self.tokenizer))
+        # 토크나이저와 모델 초기화
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.config.name,
+            cache_dir=self.full_config.general.model_cache_dir
+        )
+        self.model = BartForConditionalGeneration.from_pretrained(
+            self.config.name,
+            cache_dir=self.full_config.general.model_cache_dir
+        ).to(self.device)
+        
+        # Add special tokens (if configured)
+        if hasattr(self.config, 'tokenizer') and hasattr(self.config.tokenizer, 'special_tokens'):
+            special_tokens_dict = {
+                'additional_special_tokens': [
+                    "#Person1#", "#Person2#", "#Person3#",
+                    "#PhoneNumber#", "#Address#", "#PassportNumber#"
+                ]
+            }
+            self.tokenizer.add_special_tokens(special_tokens_dict)
+            self.model.resize_token_embeddings(len(self.tokenizer))
 
         # 양자화 설정이 활성화된 경우
-        if hasattr(config, 'quantization') and config.quantization.enabled:
-            self.quantize_model(config.quantization.bits)
+        if hasattr(self.config, 'quantization') and self.config.quantization.enabled:
+            self.quantize_model()
 
     def quantize_model(self, bits=8):
         """모델 양자화"""

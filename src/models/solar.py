@@ -4,6 +4,7 @@ import time
 from tqdm import tqdm
 import os
 from dotenv import load_dotenv
+from omegaconf import OmegaConf
 
 class SolarAPI:
     def __init__(self, config: Dict[str, Any]):
@@ -20,7 +21,8 @@ class SolarAPI:
     def _build_messages(self, dialogue: str, sample_dialogue: str = None, 
                        sample_summary: str = None, prompt_version: str = "v1") -> List[Dict[str, str]]:
         """메시지 구성"""
-        templates = self.config.prompt_templates[prompt_version]
+        version = str(prompt_version.replace('v', ''))
+        templates = self.config.prompt_templates[version]
         
         messages = [
             {
@@ -30,14 +32,12 @@ class SolarAPI:
         ]
         
         if sample_dialogue and sample_summary:
-            if prompt_version == "v2":
-                # v2 형식: 3-turn 대화 형식
-                instruction = str(templates.instruction)
+            if version == "2":
                 # First turn: 예시 대화
                 messages.append({
                     "role": "user",
                     "content": str(templates.few_shot.user).format(
-                        instruction=instruction,
+                        instruction=str(templates.instruction),
                         sample_dialogue=sample_dialogue
                     )
                 })
@@ -85,19 +85,27 @@ class SolarAPI:
         )
         
         try:
+            # OmegaConf ListConfig를 일반 리스트로 변환
+            generation_config = OmegaConf.to_container(self.config.api.generation)
+            
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
                 temperature=self.temperature,
                 top_p=self.top_p,
+                max_tokens=generation_config['max_tokens'],
+                stop=list(generation_config['stop']),  # ListConfig를 list로 변환
                 stream=False
             )
             
-            return response.choices[0].message.content.strip()
+            summary = response.choices[0].message.content.strip()
+            if not summary:
+                return "요약 생성에 실패했습니다."
+            return summary
             
         except Exception as e:
             print(f"API 호출 중 오류 발생: {str(e)}")
-            return ""
+            return "API 오류가 발생했습니다."
         
     def batch_summarize(self, dialogues: List[str], sample_dialogue: str = None, 
                        sample_summary: str = None, prompt_version: str = "v1") -> List[str]:

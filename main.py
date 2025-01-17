@@ -5,6 +5,7 @@ import torchvision
 from typing import List
 import pandas as pd
 import os
+import numpy as np
 
 # Beta transforms 경고 끄기
 torchvision.disable_beta_transforms_warning()
@@ -21,13 +22,11 @@ import pytorch_lightning as pl
 from datetime import datetime
 from omegaconf import OmegaConf
 
-from src.data.dataset import DataProcessor, download_and_extract
-from src.data.data import DataLoader
+from src.data.dataset import DataProcessor, download_and_extract, load_dataset
 from src.models.model_factory import ModelFactory
 from src.utils.utils import save_predictions
 from src.utils.metrics import Metrics, compute_metrics
 from src.trainer import CustomTrainer
-from src.data.data_manager import DataManager
 
 def get_model_size(model):
     """모델의 파라미터 수를 반환"""
@@ -92,24 +91,37 @@ def main(cfg: DictConfig):
             "model/num_parameters": get_model_size(model.model)
         })
     
+    # 프롬프트 모드일 때 few-shot 샘플 준비
+    sample_dialogue = None
+    sample_summary = None
+    
     # 모델 타입에 따른 처리
-    if cfg.model.mode == "prompt":  # type을 mode로 변경
-        data_manager = DataManager(cfg)
-        train_df, val_df, test_df = data_manager.load_data()
-        few_shot_samples = data_manager.get_few_shot_samples(train_df)
-        sample_dialogue = few_shot_samples.iloc[0]['dialogue']
-        sample_summary = few_shot_samples.iloc[0]['summary']
+    if cfg.model.mode == "prompt":
+        processor = DataProcessor(None, cfg)
+        train_df, val_df, test_df = processor.load_data()
+        
+        # few-shot 샘플 준비
+        if cfg.prompt.mode == "few-shot":
+            few_shot_samples = train_df.sample(n=cfg.prompt.n_samples, random_state=cfg.general.seed)
+            sample_dialogue = few_shot_samples.iloc[0]['dialogue']
+            sample_summary = few_shot_samples.iloc[0]['summary']
+            print(f"\nFew-shot 샘플:")
+            print(f"대화: {sample_dialogue}")
+            print(f"요약: {sample_summary}\n")
         
         # Initialize metrics
         metrics = Metrics()
         
         print(f"\nTesting prompt version {cfg.prompt.version}")
+        # 검증 데이터 요약 생성 (한 번만 실행)
         val_predictions = model.batch_summarize(
             val_df['dialogue'].tolist()[:cfg.prompt.n_samples],
             sample_dialogue,
             sample_summary,
-            prompt_version=f"v{cfg.prompt.version}"
+            prompt_version=cfg.prompt.version
         )
+        
+        # 메트릭 계산 및 로깅
         val_score, avg_score_dict = metrics.compute_batch_metrics(
             val_predictions,
             val_df['summary'].tolist()[:cfg.prompt.n_samples]
@@ -118,14 +130,12 @@ def main(cfg: DictConfig):
         key_map = cfg.metrics
         wandb.log({key_map[k]: v for k, v in avg_score_dict.items() if k in key_map})
         if cfg.prompt.save_predictions:
-            # Generate test predictions
             test_predictions = model.batch_summarize(
                 test_df['dialogue'].tolist(),
                 sample_dialogue,
                 sample_summary,
                 prompt_version=f"v{cfg.prompt.version}"
             )
-            # output_dir 사용하여 예측 결과 저장
             save_predictions(
                 test_predictions,
                 test_df['fname'].tolist(),
