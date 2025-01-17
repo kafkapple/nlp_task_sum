@@ -102,3 +102,23 @@ metrics:
 huggingface:
   token: ${oc.env:HUGGINGFACE_TOKEN}
   cache_dir: ${general.model_cache_dir}
+
+lora:
+  r: 8
+  alpha: 32
+  dropout: 0.1
+  target_modules: ["q_proj", "v_proj"]
+
+train:
+  training:
+    num_epochs: 3
+    learning_rate: 2e-5
+    train_batch_size: 4
+    eval_batch_size: 4
+    warmup_ratio: 0.1
+    weight_decay: 0.01
+    fp16: true
+    bf16: false
+    optimization:
+      gradient_checkpointing: true
+      gradient_accumulation_steps: 4

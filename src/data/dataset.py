@@ -70,9 +70,15 @@ class DialogueDataset:
         return len(self.encoder_input['input_ids'])
         
     def __getitem__(self, idx):
+        # 기본 입력
         item = {k: v[idx] for k, v in self.encoder_input.items()}
+        
+        # labels는 항상 포함 (없으면 -100으로 채움)
         if self.labels is not None:
             item.update({k: v[idx] for k, v in self.labels.items()})
+        else:
+            item['labels'] = torch.full_like(item['input_ids'], -100)
+            
         return item
 
 class DataProcessor:
@@ -116,24 +122,46 @@ class DataProcessor:
         """Llama 모델용 데이터셋 준비"""
         processed_data = []
         for _, row in df.iterrows():
-            inputs = self.tokenizer.model.prepare_inputs_for_generation(
-                row['dialogue'],
-                row.get('summary', None) if is_train else None
+            # 프롬프트 생성
+            if is_train:
+                prompt = f"Dialogue:\n{row['dialogue']}\nSummary:\n{row['summary']}"
+            else:
+                prompt = f"Dialogue:\n{row['dialogue']}\nSummary:"
+            
+            # 토크나이징
+            inputs = self.tokenizer(
+                prompt,
+                max_length=self.config.model.tokenizer.max_length,
+                padding='max_length',
+                truncation=True,
+                return_tensors='pt'
             )
+            
+            if is_train:
+                labels = inputs['input_ids'].clone()
+                # dialogue 부분은 -100으로 마스킹
+                summary_start = (inputs['input_ids'] == self.tokenizer.encode("Summary:", add_special_tokens=False)[0]).nonzero()[0][1]
+                labels[0, :summary_start] = -100
+            else:
+                labels = torch.full_like(inputs['input_ids'], -100)  # 전체를 -100으로
+            
             processed_data.append({
                 'input_ids': inputs['input_ids'][0],
                 'attention_mask': inputs['attention_mask'][0],
-                'labels': inputs.get('labels', None)[0] if 'labels' in inputs else None
+                'labels': labels[0]  # 항상 labels 포함
             })
-            
-        return DialogueDataset(
+        
+        # 데이터셋 생성
+        dataset = DialogueDataset(
             encoder_input={
                 'input_ids': torch.stack([d['input_ids'] for d in processed_data]),
                 'attention_mask': torch.stack([d['attention_mask'] for d in processed_data])
             },
-            labels={'input_ids': torch.stack([d['labels'] for d in processed_data])} if is_train else None,
+            labels={'input_ids': torch.stack([d['labels'] for d in processed_data])},  # 항상 labels 포함
             tokenizer=self.tokenizer
         )
+        
+        return dataset
         
     def _prepare_bart_dataset(self, df: pd.DataFrame, is_train: bool) -> DialogueDataset:
         """Bart 모델용 데이터셋 준비"""

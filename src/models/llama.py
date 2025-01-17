@@ -15,14 +15,14 @@ class LlamaModel(BaseModel):
         self._init_model()
         
         # finetune 모드일 때 LoRA 설정
-        if self.config.mode == "finetune":  # config.model.mode -> config.mode
+        if self.config.mode == "finetune":
             peft_config = LoraConfig(
                 task_type=TaskType.CAUSAL_LM,
                 inference_mode=False,
-                r=self.full_config.lora.r,  # full_config 사용
-                lora_alpha=self.full_config.lora.alpha,
-                lora_dropout=self.full_config.lora.dropout,
-                target_modules=self.full_config.lora.target_modules
+                r=self.config.lora.r,  # config.model의 lora 설정 사용
+                lora_alpha=self.config.lora.alpha,
+                lora_dropout=self.config.lora.dropout,
+                target_modules=self.config.lora.target_modules
             )
             self.model = get_peft_model(self.model, peft_config)
             self.model.print_trainable_parameters()
