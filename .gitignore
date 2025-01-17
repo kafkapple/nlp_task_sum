@@ -9,7 +9,7 @@ models/
 !src/data/
 !src/models/
 _backup/
-
+.env
 *.pt
 __pycache__/
 *.py[cod]
