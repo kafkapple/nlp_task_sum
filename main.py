@@ -42,14 +42,17 @@ def init_wandb(cfg: DictConfig):
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # wandb 설정
-    os.environ["WANDB_DIR"] = str(output_dir)  # wandb 출력 디렉토리 환경변수로 설정
+    os.environ["WANDB_DIR"] = str(output_dir)
+    
+    # OmegaConf를 일반 dict로 변환 (직렬화 가능하도록)
+    config_dict = OmegaConf.to_container(cfg, resolve=True, enum_to_str=True)
     
     wandb.init(
         project=cfg.wandb.project,
         name=run_name,
-        config=OmegaConf.to_container(cfg, resolve=True),
+        config=config_dict,  # 변환된 dict 사용
         group=cfg.model.family,
-        dir=str(output_dir),  # wandb 출력 디렉토리 설정
+        dir=str(output_dir),
         settings=wandb.Settings(
             start_method="thread",
             _disable_stats=True

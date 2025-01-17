@@ -5,7 +5,7 @@ import tarfile
 import torch
 import pandas as pd
 from typing import Optional, Tuple, Dict, Any
-from datasets import Dataset
+from datasets import Dataset as HFDataset
 import logging
 from tqdm import tqdm
 
@@ -118,7 +118,7 @@ class DataProcessor:
         else:
             return self._prepare_bart_dataset(df, is_train)
             
-    def _prepare_llama_dataset(self, df: pd.DataFrame, is_train: bool) -> DialogueDataset:
+    def _prepare_llama_dataset(self, df: pd.DataFrame, is_train: bool) -> HFDataset:
         """Llama 모델용 데이터셋 준비"""
         processed_data = []
         for _, row in df.iterrows():
@@ -139,29 +139,23 @@ class DataProcessor:
             
             if is_train:
                 labels = inputs['input_ids'].clone()
-                # dialogue 부분은 -100으로 마스킹
                 summary_start = (inputs['input_ids'] == self.tokenizer.encode("Summary:", add_special_tokens=False)[0]).nonzero()[0][1]
                 labels[0, :summary_start] = -100
             else:
-                labels = torch.full_like(inputs['input_ids'], -100)  # 전체를 -100으로
+                labels = torch.full_like(inputs['input_ids'], -100)
             
             processed_data.append({
-                'input_ids': inputs['input_ids'][0],
-                'attention_mask': inputs['attention_mask'][0],
-                'labels': labels[0]  # 항상 labels 포함
+                'input_ids': inputs['input_ids'][0].tolist(),  # numpy/list로 변환
+                'attention_mask': inputs['attention_mask'][0].tolist(),
+                'labels': labels[0].tolist()
             })
         
-        # 데이터셋 생성
-        dataset = DialogueDataset(
-            encoder_input={
-                'input_ids': torch.stack([d['input_ids'] for d in processed_data]),
-                'attention_mask': torch.stack([d['attention_mask'] for d in processed_data])
-            },
-            labels={'input_ids': torch.stack([d['labels'] for d in processed_data])},  # 항상 labels 포함
-            tokenizer=self.tokenizer
-        )
-        
-        return dataset
+        # HuggingFace Dataset 생성
+        return HFDataset.from_dict({
+            'input_ids': [d['input_ids'] for d in processed_data],
+            'attention_mask': [d['attention_mask'] for d in processed_data],
+            'labels': [d['labels'] for d in processed_data]
+        })
         
     def _prepare_bart_dataset(self, df: pd.DataFrame, is_train: bool) -> DialogueDataset:
         """Bart 모델용 데이터셋 준비"""
