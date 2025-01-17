@@ -5,6 +5,22 @@ from typing import List, Optional
 from peft import get_peft_model, LoraConfig, TaskType
 from pathlib import Path
 from omegaconf import OmegaConf
+from transformers.generation import StoppingCriteriaList, StoppingCriteria
+
+class StopWordsCriteria(StoppingCriteria):
+    def __init__(self, stop_words, tokenizer, prompt_length):
+        self.stop_words = stop_words
+        self.tokenizer = tokenizer
+        self.prompt_length = prompt_length  # 프롬프트 길이 저장
+        
+    def __call__(self, input_ids, scores, **kwargs):
+        # 새로 생성된 부분만 디코딩
+        new_text = self.tokenizer.decode(
+            input_ids[0][self.prompt_length:], 
+            skip_special_tokens=True
+        )
+        # 정확한 매칭만 체크 (endswith 제거)
+        return any(word == new_text.strip() for word in self.stop_words)
 
 class LlamaModel(BaseModel):
     def __init__(self, config):
@@ -69,20 +85,22 @@ class LlamaModel(BaseModel):
         return self.model(**inputs)
         
     def generate(self, prompt: str) -> str:
-        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
-        
         generation_config = OmegaConf.to_container(self.config.generation)
         
-        # 특수 토큰 ID 추가
-        generation_config.update({
-            'pad_token_id': self.tokenizer.pad_token_id,
-            'eos_token_id': self.tokenizer.eos_token_id,
-            'bos_token_id': self.tokenizer.bos_token_id
-        })
+        # stop_sequences나 stop_tokens가 있으면 추가
+        if 'stop_sequences' in generation_config:
+            generation_config['stop'] = generation_config.pop('stop_sequences')
+        elif 'stop_tokens' in generation_config:
+            generation_config['stop'] = generation_config.pop('stop_tokens')
+        
+        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
         
         outputs = self.model.generate(
             **inputs,
-            **generation_config
+            **generation_config,
+            pad_token_id=self.tokenizer.pad_token_id,
+            eos_token_id=self.tokenizer.eos_token_id,
+            bos_token_id=self.tokenizer.bos_token_id
         )
         
         # 생성된 텍스트에서 Summary: 이후 부분만 추출
@@ -125,26 +143,33 @@ class LlamaModel(BaseModel):
     def batch_summarize(self, dialogues: List[str], sample_dialogue: str = None, 
                        sample_summary: str = None, **kwargs) -> List[str]:
         summaries = []
-        
-        # yaml 설정을 직접 사용
-        generation_config = self.config.generation
+        generation_config = OmegaConf.to_container(self.config.generation)
         
         for dialogue in dialogues:
             prompt = self._build_prompt(dialogue, sample_dialogue, sample_summary)
             inputs = self.tokenizer(prompt, return_tensors="pt", padding=True)
             inputs = {k: v.to(self.device) for k, v in inputs.items()}
             
+            # 디버깅 로그 추가
+            print("\n생성 설정:")
+            print(f"- 설정값: {generation_config}")
+            print(f"- 프롬프트 길이: {len(inputs['input_ids'][0])}")
+            
             with torch.no_grad():
                 outputs = self.model.generate(
                     **inputs,
-                    **OmegaConf.to_container(generation_config),  # yaml 설정을 모두 적용
-                    pad_token_id=self.tokenizer.pad_token_id,
-                    eos_token_id=self.tokenizer.eos_token_id
+                    **generation_config,
+                    stopping_criteria=None  # 일단 stopping_criteria 제거
                 )
                 
+            # 디버깅 로그 추가
+            print(f"- 생성된 토큰 수: {len(outputs[0])}")
+            
             summary = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-            # prompt 부분과 불필요한 접미사 제거
+            print(f"- 생성된 전체 텍스트: {summary}")
+            
             summary = self._clean_generated_text(summary, prompt)
+            print(f"- 정제된 요약문: {summary}")
             summaries.append(summary)
             
         return summaries 

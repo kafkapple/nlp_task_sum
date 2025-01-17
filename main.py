@@ -6,6 +6,7 @@ from typing import List
 import pandas as pd
 import os
 import numpy as np
+import random
 
 # Beta transforms 경고 끄기
 torchvision.disable_beta_transforms_warning()
@@ -88,11 +89,27 @@ def print_samples(original_texts: List[str],
         print(f"\nPredicted Summary:\n{pred_summaries[i]}")
         print("\n" + "="*110)
 
+def setup_seeds(seed: int):
+    """모든 random seed 설정"""
+    import random
+    import numpy as np
+    import pandas as pd
+    import torch
+    
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    pd.options.mode.chained_assignment = None
+
 @hydra.main(version_base="1.2", config_path="config", config_name="config")
 def main(cfg: DictConfig):
-    # wandb 초기화 및 출력 디렉토리 설정
-    output_dir = init_wandb(cfg)
+    # 모든 random seed 설정
+    setup_seeds(cfg.general.seed)
     pl.seed_everything(cfg.general.seed)
+    
+    # output_dir 초기화
+    output_dir = init_wandb(cfg)
     
     # Ensure data directory exists
     download_and_extract(cfg.url.data, cfg.general.data_path)
@@ -120,7 +137,11 @@ def main(cfg: DictConfig):
         
         if cfg.prompt.mode == "few-shot":
             print("Few-shot 샘플 준비 중...")
-            few_shot_samples = train_df.sample(n=cfg.prompt.n_samples, random_state=cfg.general.seed)
+            # pandas의 sample 메서드에 random_state 전달
+            few_shot_samples = train_df.sample(
+                n=cfg.prompt.n_samples, 
+                random_state=cfg.general.seed  # 여기도 seed 전달
+            )
             sample_dialogue = few_shot_samples.iloc[0]['dialogue']
             sample_summary = few_shot_samples.iloc[0]['summary']
             print(f"\nFew-shot 샘플:")

@@ -1,4 +1,4 @@
-name: "solar/solar-1.0"
+name: "solar-api"  # wandb 로깅용
 family: "solar"
 mode: "prompt"
 
@@ -6,8 +6,11 @@ mode: "prompt"
 api:
   base_url: "https://api.upstage.ai/v1/solar"
   api_key: ${oc.env:UPSTAGE_API_KEY}
+  model: "solar-1-mini-chat"
+
+# 생성 설정
+generation:
+  max_new_tokens: 64
   temperature: 0.2
-  top_p: 0.9
-  generation:
-    max_tokens: 64  # max_tokens만 유지
-    stop: ["<s>", "</s>", "<pad>"]  # stop 토큰만 유지
+  top_p: 0.95
+  stop_sequences: ["###", "대화", "Summary:", "Dialogue:"]

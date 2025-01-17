@@ -7,16 +7,19 @@ from dotenv import load_dotenv
 from omegaconf import OmegaConf
 
 class SolarAPI:
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config):
         load_dotenv()
+        api_key = os.getenv('UPSTAGE_API_KEY', config.model.api.api_key)
+        print(f"API Key 확인: {api_key[:8]}...")  # API 키의 앞부분만 출력
+        
         self.client = OpenAI(
-            api_key=os.getenv('UPSTAGE_API_KEY', config.model.api.api_key),
+            api_key=api_key,
             base_url=config.model.api.base_url
         )
         self.config = config.model
-        self.model_name = "solar-1-mini-chat"
-        self.temperature = config.model.api.temperature
-        self.top_p = config.model.api.top_p
+        self.model_name = config.model.api.model  # api.model에서 모델명 가져오기
+        # generation 설정을 직접 사용
+        self.generation_config = OmegaConf.to_container(config.model.generation)
         
     def _build_messages(self, dialogue: str, sample_dialogue: str = None, 
                        sample_summary: str = None, prompt_version: str = "v1") -> List[Dict[str, str]]:
@@ -85,16 +88,19 @@ class SolarAPI:
         )
         
         try:
-            # OmegaConf ListConfig를 일반 리스트로 변환
-            generation_config = OmegaConf.to_container(self.config.api.generation)
+            print(f"API 요청 설정:")
+            print(f"- temperature: {self.generation_config['temperature']}")
+            print(f"- top_p: {self.generation_config['top_p']}")
+            print(f"- max_tokens: {self.generation_config['max_new_tokens']}")
+            print(f"- stop: {self.generation_config['stop_sequences']}")
             
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
-                temperature=self.temperature,
-                top_p=self.top_p,
-                max_tokens=generation_config['max_tokens'],
-                stop=list(generation_config['stop']),  # ListConfig를 list로 변환
+                temperature=self.generation_config['temperature'],
+                top_p=self.generation_config['top_p'],
+                max_tokens=self.generation_config['max_new_tokens'],
+                stop=self.generation_config['stop_sequences'],
                 stream=False
             )
             
@@ -104,7 +110,10 @@ class SolarAPI:
             return summary
             
         except Exception as e:
-            print(f"API 호출 중 오류 발생: {str(e)}")
+            print(f"\nAPI 호출 중 상세 오류:")
+            print(f"- 오류 유형: {type(e).__name__}")
+            print(f"- 오류 메시지: {str(e)}")
+            print(f"- 모델명: {self.model_name}")
             return "API 오류가 발생했습니다."
         
     def batch_summarize(self, dialogues: List[str], sample_dialogue: str = None, 

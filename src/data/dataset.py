@@ -8,6 +8,8 @@ from typing import Optional, Tuple, Dict, Any
 from datasets import Dataset as HFDataset
 import logging
 from tqdm import tqdm
+import random
+import numpy as np
 
 def download_and_extract(url: str, data_path: str):
     """데이터 다운로드 및 압축 해제"""
@@ -84,11 +86,15 @@ class DialogueDataset:
 class DataProcessor:
     """데이터 처리 및 데이터셋 생성 클래스"""
     
-    def __init__(self, tokenizer, config, data_path: str = None):
+    def __init__(self, tokenizer, cfg):
         self.tokenizer = tokenizer
-        self.config = config
-        self.data_path = Path(data_path) if data_path else Path(config.general.data_path)
-        
+        self.cfg = cfg
+        self.data_path = Path(cfg.general.data_path)
+        # 초기화 시 seed 설정
+        if hasattr(cfg.general, 'seed'):
+            random.seed(cfg.general.seed)
+            np.random.seed(cfg.general.seed)
+            
     def load_data(self, data_path: str = None) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """데이터 로드"""
         data_path = Path(data_path or self.data_path)
@@ -100,6 +106,10 @@ class DataProcessor:
         logging.info(f"Validation samples: {len(val_df)}")
         logging.info(f"Test samples: {len(test_df)}")
         
+        # seed 설정 확인
+        if hasattr(self.cfg.general, 'seed'):
+            np.random.seed(self.cfg.general.seed)
+            
         return train_df, val_df, test_df
         
     def get_few_shot_samples(self, train_df: pd.DataFrame, 
