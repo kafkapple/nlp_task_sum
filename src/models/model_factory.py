@@ -14,17 +14,17 @@ class ModelFactory:
         "solar": {
             "class": "SolarAPI",
             "module": "solar",
-            "types": ["prompt"]
+            "modes": ["prompt"]
         },
         "bart": {
             "class": "BartSummarizer",
             "module": "bart",
-            "types": ["finetune"]
+            "modes": ["finetune"]
         },
         "llama": {
             "class": "LlamaModel",
             "module": "llama",
-            "types": ["finetune", "prompt"]
+            "modes": ["finetune", "prompt"]
         }
     }
     
@@ -36,19 +36,18 @@ class ModelFactory:
     @classmethod
     def create_model(cls, config: DictConfig):
         """Create appropriate model instance based on config"""
-        # huggingface 토큰 설정
         os.environ['HUGGINGFACE_TOKEN'] = config.huggingface.token
         login(token=config.huggingface.token)
         
         model_family = config.model.family
-        model_type = config.model.type
+        model_mode = config.model.mode
 
         if model_family not in cls._model_families:
             raise ValueError(f"Unsupported model family: {model_family}")
             
         model_info = cls._model_families[model_family]
-        if model_type not in model_info["types"]:
-            raise ValueError(f"Model {model_family} does not support type: {model_type}")
+        if model_mode not in model_info["modes"]:
+            raise ValueError(f"Model {model_family} does not support mode: {model_mode}")
 
         # 동적으로 모델 클래스 import
         module = __import__(f"src.models.{model_info['module']}", 

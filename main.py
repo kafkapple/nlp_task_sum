@@ -4,6 +4,7 @@ import warnings
 import torchvision
 from typing import List
 import pandas as pd
+import os
 
 # Beta transforms 경고 끄기
 torchvision.disable_beta_transforms_warning()
@@ -35,14 +36,29 @@ def get_model_size(model):
 def init_wandb(cfg: DictConfig):
     """wandb 초기화"""
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    run_name = f"{cfg.model.name}_{cfg.model.type}_{timestamp}"
+    run_name = f"{cfg.model.name}_{cfg.model.mode}_{timestamp}"
+    
+    # output_path 생성
+    output_dir = Path(cfg.general.output_path)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # wandb 설정
+    os.environ["WANDB_DIR"] = str(output_dir)  # wandb 출력 디렉토리 환경변수로 설정
     
     wandb.init(
         project=cfg.wandb.project,
         name=run_name,
         config=OmegaConf.to_container(cfg, resolve=True),
-        group=cfg.model.family  # 모델 계열로 그룹화
+        group=cfg.model.family,
+        dir=str(output_dir),  # wandb 출력 디렉토리 설정
+        settings=wandb.Settings(
+            start_method="thread",
+            _disable_stats=True
+        )
     )
+    
+    print(f"Outputs will be saved to: {output_dir}")
+    return output_dir
 
 def print_samples(original_texts: List[str], 
                  gold_summaries: List[str], 
@@ -60,8 +76,8 @@ def print_samples(original_texts: List[str],
 
 @hydra.main(version_base="1.2", config_path="config", config_name="config")
 def main(cfg: DictConfig):
-    # wandb 초기화
-    init_wandb(cfg)
+    # wandb 초기화 및 출력 디렉토리 설정
+    output_dir = init_wandb(cfg)
     pl.seed_everything(cfg.general.seed)
     
     # Ensure data directory exists
@@ -77,7 +93,7 @@ def main(cfg: DictConfig):
         })
     
     # 모델 타입에 따른 처리
-    if cfg.model.type == "prompt":  # prompt/finetune 모드 체크
+    if cfg.model.mode == "prompt":  # type을 mode로 변경
         data_manager = DataManager(cfg)
         train_df, val_df, test_df = data_manager.load_data()
         few_shot_samples = data_manager.get_few_shot_samples(train_df)
@@ -92,7 +108,7 @@ def main(cfg: DictConfig):
             val_df['dialogue'].tolist()[:cfg.prompt.n_samples],
             sample_dialogue,
             sample_summary,
-            prompt_version=cfg.prompt.version
+            prompt_version=f"v{cfg.prompt.version}"
         )
         val_score, avg_score_dict = metrics.compute_batch_metrics(
             val_predictions,
@@ -106,12 +122,14 @@ def main(cfg: DictConfig):
             test_predictions = model.batch_summarize(
                 test_df['dialogue'].tolist(),
                 sample_dialogue,
-                sample_summary
+                sample_summary,
+                prompt_version=f"v{cfg.prompt.version}"
             )
+            # output_dir 사용하여 예측 결과 저장
             save_predictions(
                 test_predictions,
                 test_df['fname'].tolist(),
-                cfg.general.output_path / "prediction_prompt.csv"
+                output_dir / "prediction_prompt.csv"
             )
             
         # 샘플 출력

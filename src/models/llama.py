@@ -3,6 +3,7 @@ from src.models.base_model import BaseModel
 import torch
 from typing import List, Optional
 from peft import get_peft_model, LoraConfig, TaskType
+from pathlib import Path
 
 class LlamaModel(BaseModel):
     def __init__(self, config):
@@ -16,30 +17,52 @@ class LlamaModel(BaseModel):
             peft_config = LoraConfig(
                 task_type=TaskType.CAUSAL_LM,
                 inference_mode=False,
-                r=8,
-                lora_alpha=32,
-                lora_dropout=0.1,
-                target_modules=["q_proj", "v_proj"]
+                r=self.config.lora.r,
+                lora_alpha=self.config.lora.alpha,
+                lora_dropout=self.config.lora.dropout,
+                target_modules=self.config.lora.target_modules
             )
             self.model = get_peft_model(self.model, peft_config)
             self.model.print_trainable_parameters()
     
     def _init_model(self):
+        # cache_dir 설정 및 생성
+        cache_dir = Path(self.config.general.model_cache_dir)  # general에서 경로 가져오기
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        print(f"모델 캐시 디렉토리: {cache_dir}")
+        
         # 토크나이저 초기화
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.config.model.name,
-            trust_remote_code=True
-        )
-        self.tokenizer.pad_token = self.tokenizer.eos_token
-        
-        # 모델 초기화
-        self.model = AutoModelForCausalLM.from_pretrained(
-            self.config.model.name,
-            trust_remote_code=True,
-            torch_dtype=getattr(torch, "float16"),
-            device_map="auto",
-        )
-        
+        try:
+            print(f"토크나이저 로드 중... ({self.config.model.name})")
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                self.config.model.name,
+                trust_remote_code=True,
+                cache_dir=cache_dir,
+                local_files_only=False  # 필요한 경우 온라인에서 다운로드
+            )
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+            print("토크나이저 로드 완료")
+            
+            # 모델 초기화
+            print("모델 로드 중...")
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.config.model.name,
+                trust_remote_code=True,
+                torch_dtype=getattr(torch, "float16"),
+                device_map="auto",
+                cache_dir=cache_dir,
+                local_files_only=False  # 필요한 경우 온라인에서 다운로드
+            )
+            print("모델 로드 완료")
+            
+        except Exception as e:
+            print(f"모델 로드 중 오류 발생: {str(e)}")
+            print(f"캐시 디렉토리 내용:")
+            if cache_dir.exists():
+                for item in cache_dir.iterdir():
+                    print(f" - {item}")
+            raise
+    
     def forward(self, **inputs):
         return self.model(**inputs)
         
@@ -49,7 +72,7 @@ class LlamaModel(BaseModel):
     def _build_prompt(self, dialogue: str, sample_dialogue: Optional[str] = None, 
                      sample_summary: Optional[str] = None, prompt_version: str = "v1") -> str:
         if self.config.model.mode == "prompt":
-            templates = self.config.model.prompt_templates[prompt_version]
+            templates = self.config.prompt_templates[prompt_version]
             
             if sample_dialogue and sample_summary:
                 # few-shot prompt

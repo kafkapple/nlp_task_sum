@@ -8,6 +8,7 @@ general:
   timestamp: ${now:%Y%m%d_%H%M%S}
   data_path: "${hydra:runtime.cwd}/data"
   output_path: "${hydra:runtime.cwd}/outputs/${general.timestamp}"
+  model_cache_dir: "${hydra:runtime.cwd}/../models"
 
 wandb:
   project: "dialogue-summary"
@@ -15,8 +16,8 @@ wandb:
   name: ${general.timestamp}
 
 prompt:
-  n_samples: 2
-  save_predictions: true
+  n_samples: 3
+  save_predictions: false
   version: 2
   system: "You are a expert in the field of dialogue summarization..."
   instruction: |
@@ -46,4 +47,4 @@ metrics:
 
 huggingface:
   token: ${oc.env:HUGGINGFACE_TOKEN}
-  cache_dir: "${hydra:runtime.cwd}/../models"  # 상위 디렉토리의 models
+  cache_dir: ${general.model_cache_dir}
