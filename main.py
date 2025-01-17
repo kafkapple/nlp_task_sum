@@ -76,7 +76,8 @@ def main(cfg: DictConfig):
             "model/num_parameters": get_model_size(model.model)
         })
     
-    if cfg.model.type == "prompt":
+    # 모델 타입에 따른 처리
+    if cfg.model.type == "prompt":  # prompt/finetune 모드 체크
         data_manager = DataManager(cfg)
         train_df, val_df, test_df = data_manager.load_data()
         few_shot_samples = data_manager.get_few_shot_samples(train_df)

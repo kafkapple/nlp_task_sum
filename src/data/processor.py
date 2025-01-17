@@ -19,7 +19,7 @@ class DataProcessor:
         df = pd.read_csv(data_path)
         
         is_train = mode == "train"
-        if isinstance(self.tokenizer.model, "LlamaModel"):
+        if self.config.model.family == "llama":
             return self._prepare_llama_dataset(df, is_train)
         else:
             return self._prepare_bart_dataset(df, is_train)

@@ -1,10 +1,11 @@
 name: "solar/solar-1.0"
-type: "solar"
-mode: "prompt"
+family: "llama"
+type: "prompt"
 
 # API 설정
 api:
-  base_url: "..."
+  base_url: "http://211.237.9.6:8080/v1"
+  api_key: "sk-solar-api-key"
   temperature: 0.7
   top_p: 0.9
 
