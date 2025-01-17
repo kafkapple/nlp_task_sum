@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from transformers.utils import logging
 from torch.quantization import quantize_dynamic
 import torch
+from typing import List
+from tqdm import tqdm
+
 @dataclass
 class TokenizerConfig:
     bos_token: str
@@ -64,3 +67,43 @@ class BartSummarizer(nn.Module):
 
     def forward(self, **inputs):
         return self.model(**inputs) 
+
+    def batch_summarize(self, dialogues: List[str], sample_dialogue: str = None, 
+                       sample_summary: str = None, prompt_version: str = "v1") -> List[str]:
+        """배치 단위로 요약 생성"""
+        summaries = []
+        for dialogue in tqdm(dialogues, desc="Generating summaries"):
+            # 프롬프트 생성
+            prompt = self._build_prompt(dialogue, sample_dialogue, sample_summary, prompt_version)
+            
+            # 입력 인코딩
+            inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, 
+                                  max_length=self.config.tokenizer.encoder_max_len).to(self.device)
+            
+            # 요약 생성
+            outputs = self.model.generate(
+                **inputs,
+                max_length=self.config.generation.max_new_tokens,
+                min_length=self.config.generation.min_length,
+                num_beams=self.config.generation.num_beams,
+                temperature=self.config.generation.temperature,
+                top_p=self.config.generation.top_p,
+                repetition_penalty=self.config.generation.repetition_penalty,
+                length_penalty=self.config.generation.length_penalty,
+                early_stopping=self.config.generation.early_stopping
+            )
+            
+            summary = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+            summaries.append(summary)
+            
+        return summaries
+
+    def _build_prompt(self, dialogue: str, sample_dialogue: str = None, 
+                     sample_summary: str = None, prompt_version: str = "v1") -> str:
+        """프롬프트 생성"""
+        if sample_dialogue and sample_summary:
+            # few-shot 프롬프트
+            return f"Dialogue:\n{sample_dialogue}\nSummary:\n{sample_summary}\n\nDialogue:\n{dialogue}\nSummary:"
+        else:
+            # zero-shot 프롬프트
+            return f"Dialogue:\n{dialogue}\nSummary:" 

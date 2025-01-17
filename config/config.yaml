@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - model: kobart
+  - model: bllossom
   - train: default
 
 prompt_templates:
@@ -38,6 +38,9 @@ prompt_templates:
       1. Only output the summary, nothing else
       2. Do not include any instructions or markers
       3. Keep it simple and focused
+    instruction: |
+      Please summarize the following dialogue in Korean.
+      Be concise and focus on the key points.
     few_shot:
       user: |
         Dialogue:
@@ -68,8 +71,8 @@ wandb:
 prompt:
   mode: "few-shot"
   version: "v2"
-  n_samples: 3
-  save_predictions: false
+  n_samples: 100
+  save_predictions: true
   system: "You are a expert in the field of dialogue summarization..."
   instruction: |
     Following the instructions below...

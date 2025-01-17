@@ -1,6 +1,6 @@
 name: "MLP-KTLim/llama-3-Korean-Bllossom-8B"
 family: "llama"
-mode: "prompt"
+mode: "finetune"
 
 # 토크나이저 설정
 tokenizer:
