@@ -1,21 +1,37 @@
-from transformers import Seq2SeqTrainer
-from typing import Dict
-import wandb
+from transformers import Seq2SeqTrainer, TrainerCallback
+from typing import Dict, Any
+
+class WandBCallback(TrainerCallback):
+    """WandB 로깅을 위한 커스텀 콜백"""
+    def on_log(self, args, state, control, logs: Dict[str, Any] = None, **kwargs):
+        if not logs:
+            return
+        
+        # 기본 메트릭 처리
+        clean_logs = {}
+        for k, v in logs.items():
+            try:
+                if isinstance(v, (int, float, str, bool)):
+                    clean_logs[k] = v
+                else:
+                    # 복잡한 객체는 문자열로 변환
+                    clean_logs[k] = str(v)
+            except:
+                continue
+                
+        # epoch 추가
+        if state.epoch is not None:
+            clean_logs["epoch"] = round(state.epoch, 2)
+            
+        # step 추가
+        if state.global_step is not None:
+            clean_logs["step"] = state.global_step
+            
+        # wandb에 로깅
+        import wandb
+        wandb.log(clean_logs)
 
 class CustomTrainer(Seq2SeqTrainer):
     def __init__(self, *args, **kwargs):
-        # model 객체에서 내부 모델을 추출
-        if hasattr(kwargs['model'], 'model'):
-            kwargs['model'] = kwargs['model'].model
         super().__init__(*args, **kwargs)
-        
-    def log(self, logs: Dict[str, float], iterator=None, start_time=None) -> None:
-        """로깅 커스터마이징"""
-        if self.state.epoch is not None:
-            logs["epoch"] = round(self.state.epoch, 2)
-
-        output = {**logs, **{"step": self.state.global_step}}
-        self.state.log_history.append(output)
-        self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
-
-        wandb.log(logs) 
+        self.add_callback(WandBCallback()) 

@@ -1,6 +1,6 @@
 name: "MLP-KTLim/llama-3-Korean-Bllossom-8B"
 family: "llama"
-mode: "finetune"
+mode: "prompt"
 
 # 토크나이저 설정
 tokenizer:
@@ -16,21 +16,22 @@ model:
 
 # 생성 설정을 최상위로 이동
 generation:
-  max_new_tokens: 32
+  max_new_tokens: 48
   min_length: 10
-  temperature: 0.3
-  top_p: 0.7
-  repetition_penalty: 2.5
-  no_repeat_ngram_size: 5
+  temperature: 0.2
+  top_p: 0.9
+  repetition_penalty: 3.0
+  no_repeat_ngram_size: 6
   early_stopping: true
   do_sample: true
-  num_beams: 5
-  length_penalty: 0.6
+  num_beams: 3
+  length_penalty: 0.8
   eos_token_id: 2
   pad_token_id: 2
   bad_words: [
     "Summary:", "summary:", "요약:", "Dialogue:", "dialogue:", "대화:",
-    "Person1", "Person2", "The", "In", "This", "It", "They", "We", "You"
+    "Person1", "Person2", "The", "In", "This", "It", "They", "We", "You",
+    "assistant", "Assistant", ".", "Summary", "대화", "요약"
   ]
 
 # 양자화 설정 (finetune 모드용)

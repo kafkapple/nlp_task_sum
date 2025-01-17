@@ -1,7 +1,6 @@
 defaults:
   - _self_
   - model: bllossom
-  - train: default
 
 prompt_templates:
   "1":
@@ -56,8 +55,8 @@ prompt_templates:
       Dialogue: {dialogue}
       Summary:
 
-general:
-  seed: 42
+general: 
+  seed: 1 #42
   timestamp: ${now:%Y%m%d_%H%M%S}
   data_path: "${hydra:runtime.cwd}/data"
   output_path: "${hydra:runtime.cwd}/outputs/${general.timestamp}"
@@ -71,8 +70,8 @@ wandb:
 prompt:
   mode: "few-shot"
   version: "v2"
-  n_samples: 100
-  save_predictions: true
+  n_samples: 1
+  save_predictions: false
   system: "You are a expert in the field of dialogue summarization..."
   instruction: |
     Following the instructions below...
@@ -111,14 +110,25 @@ lora:
 
 train:
   training:
-    num_epochs: 3
     learning_rate: 2e-5
-    train_batch_size: 4
-    eval_batch_size: 4
+    num_train_epochs: 3
+    per_device_train_batch_size: 4
+    per_device_eval_batch_size: 4
     warmup_ratio: 0.1
     weight_decay: 0.01
+    gradient_checkpointing: true
+    gradient_accumulation_steps: 4
     fp16: true
     bf16: false
-    optimization:
-      gradient_checkpointing: true
-      gradient_accumulation_steps: 4
+    evaluation_strategy: "epoch"
+    save_strategy: "epoch"
+    save_total_limit: 3
+    load_best_model_at_end: true
+    metric_for_best_model: "eval_rouge1_f1"
+    greater_is_better: true
+    predict_with_generate: true
+    generation_max_length: 128
+    generation_num_beams: 5
+    logging_dir: "${general.output_path}/logs"
+    logging_steps: 100
+    remove_unused_columns: false

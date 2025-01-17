@@ -87,19 +87,18 @@ class LlamaModel(BaseModel):
         
         # 생성된 텍스트에서 Summary: 이후 부분만 추출
         generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-        if "Summary:" in generated_text:
-            summary = generated_text.split("Summary:")[-1].strip()
-        else:
-            summary = generated_text.split("\n")[0].strip()  # 첫 줄만 사용
         
-        # 불필요한 텍스트 제거
-        unwanted_prefixes = ["아래 대화를", "다음 대화를", "### 대화", "대화 형식은"]
-        for prefix in unwanted_prefixes:
-            if summary.startswith(prefix):
-                summary = summary.split("\n")[0]  # 첫 줄만 유지
-                break
-            
-        return summary.strip()
+        # 첫 번째 문장만 추출
+        if "." in generated_text:
+            generated_text = generated_text.split(".")[0] + "."
+        
+        # assistant 등 불필요한 텍스트 제거
+        unwanted_suffixes = ["assistant", "Assistant", "Summary:", "요약:"]
+        for suffix in unwanted_suffixes:
+            if generated_text.endswith(suffix):
+                generated_text = generated_text[:-len(suffix)].strip()
+        
+        return generated_text.strip()
         
     def _build_prompt(self, dialogue: str, sample_dialogue: Optional[str] = None, 
                      sample_summary: Optional[str] = None, prompt_version: str = "v1") -> str:
@@ -127,13 +126,8 @@ class LlamaModel(BaseModel):
                        sample_summary: str = None, **kwargs) -> List[str]:
         summaries = []
         
-        # generation 설정 가져오기 (없으면 기본값 사용)
-        generation_config = getattr(self.config.model, 'generation', {
-            'max_new_tokens': 512,
-            'temperature': 0.7,
-            'top_p': 0.9,
-            'repetition_penalty': 1.1
-        })
+        # yaml 설정을 직접 사용
+        generation_config = self.config.generation
         
         for dialogue in dialogues:
             prompt = self._build_prompt(dialogue, sample_dialogue, sample_summary)
@@ -143,16 +137,14 @@ class LlamaModel(BaseModel):
             with torch.no_grad():
                 outputs = self.model.generate(
                     **inputs,
-                    max_new_tokens=generation_config.get('max_new_tokens', 512),
-                    temperature=generation_config.get('temperature', 0.7),
-                    top_p=generation_config.get('top_p', 0.9),
-                    repetition_penalty=generation_config.get('repetition_penalty', 1.1),
-                    pad_token_id=self.tokenizer.pad_token_id
+                    **OmegaConf.to_container(generation_config),  # yaml 설정을 모두 적용
+                    pad_token_id=self.tokenizer.pad_token_id,
+                    eos_token_id=self.tokenizer.eos_token_id
                 )
                 
             summary = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-            # prompt 부분 제거
-            summary = summary[len(prompt):].strip()
+            # prompt 부분과 불필요한 접미사 제거
+            summary = self._clean_generated_text(summary, prompt)
             summaries.append(summary)
             
         return summaries 
@@ -183,3 +175,21 @@ class LlamaModel(BaseModel):
             inputs["labels"] = labels
             
         return inputs 
+        
+    def _clean_generated_text(self, text: str, prompt: str) -> str:
+        """생성된 텍스트 정리"""
+        # prompt 부분 제거
+        if prompt in text:
+            text = text[len(prompt):].strip()
+        
+        # 첫 번째 문장만 유지
+        if "." in text:
+            text = text.split(".")[0] + "."
+        
+        # 불필요한 접미사 제거
+        unwanted_suffixes = ["assistant", "Assistant", "Summary:", "요약:", "\n"]
+        for suffix in unwanted_suffixes:
+            if text.endswith(suffix):
+                text = text[:-len(suffix)].strip()
+            
+        return text.strip() 
