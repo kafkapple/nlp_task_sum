@@ -1,0 +1,32 @@
+training:
+  num_epochs: 2
+  learning_rate: 5e-5
+  train_batch_size: 8
+  eval_batch_size: 8
+  warmup_ratio: 0.1
+  weight_decay: 0.01
+  fp16: true
+  bf16: false
+  quantization:
+    enabled: true
+    bits: 8
+    device: "cuda"
+  optimization:
+    gradient_checkpointing: true
+    gradient_accumulation_steps: 4
+  gradient_accumulation_steps: 4 #실효 배치 크기 = 16 * 4 = 64
+  early_stopping:
+    patience: 3
+    threshold: 0.001
+
+inference:
+  batch_size: 32
+  max_length: 100
+  num_beams: 4
+  no_repeat_ngram_size: 2
+  early_stopping: true
+  remove_tokens:
+    - <usr>
+    - <s>
+    - </s>
+    - <pad> 

@@ -1,0 +1,44 @@
+name: "solar/solar-1.0"
+type: "solar"
+mode: "prompt"
+
+# API 설정
+api:
+  base_url: "..."
+  temperature: 0.7
+  top_p: 0.9
+
+# 프롬프트 템플릿 설정
+prompt_templates:
+  v1:
+    system: "You are a expert in the field of dialogue summarization..."
+    few_shot: |
+      {instruction}
+      Sample Dialogue: {sample_dialogue}
+      Sample Summary: {sample_summary}
+      
+      Dialogue: {dialogue}
+      Summary:
+    zero_shot: |
+      Dialogue: {dialogue}
+      Summary:
+  v2:
+    system: "You are a expert in the field of dialogue summarization..."
+    instruction: |
+      Following the instructions below, summarize the given document.
+      Instructions:
+      1. Read the provided sample dialogue and corresponding summary.
+      2. Read the dialogue carefully.
+      3. Following the sample's style of summary...
+    few_shot:
+      user: |
+        {instruction}
+        Dialogue: {sample_dialogue}
+        Summary:
+      assistant: "{sample_summary}"
+      final_user: |
+        Dialogue: {dialogue}
+        Summary:
+    zero_shot: |
+      Dialogue: {dialogue}
+      Summary:

@@ -1,0 +1,54 @@
+name: "MLP-KTLim/llama-3-Korean-Bllossom-8B"
+family: "llama"
+type: "prompt"
+
+# 토크나이저 설정
+tokenizer:
+  max_length: 2048
+  padding_side: "left"
+  truncation_side: "left"
+
+# 모델 설정
+model:
+  trust_remote_code: true
+  torch_dtype: "float16"
+  device_map: "auto"
+  # 생성 설정
+  generation:
+    max_new_tokens: 512
+    temperature: 0.6
+    top_p: 0.9
+    repetition_penalty: 1.1
+
+# 양자화 설정 (finetune 모드용)
+quantization:
+  enabled: true
+  precision: "int4"
+  compute_dtype: "float16"
+
+# LoRA 설정 (finetune 모드용)
+lora:
+  r: 8
+  alpha: 32
+  dropout: 0.1
+  target_modules: ["q_proj", "v_proj"]
+
+# 프롬프트 템플릿 설정
+prompt_templates:
+  v1:
+    few_shot: |
+      You are a helpful AI assistant. Please answer the user's questions kindly.
+      당신은 유능한 AI 어시스턴트 입니다. 사용자의 질문에 대해 친절하게 답변해주세요.
+
+      Example Dialogue: {sample_dialogue}
+      Example Summary: {sample_summary}
+
+      Now summarize this dialogue:
+      Dialogue: {dialogue}
+      Summary:
+    zero_shot: |
+      You are a helpful AI assistant. Please answer the user's questions kindly.
+      당신은 유능한 AI 어시스턴트 입니다. 사용자의 질문에 대해 친절하게 답변해주세요.
+
+      Dialogue: {dialogue}
+      Summary: 

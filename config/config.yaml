@@ -1,0 +1,49 @@
+defaults:
+  - _self_
+  - model: bllossom
+  - train: default
+
+general:
+  seed: 42
+  timestamp: ${now:%Y%m%d_%H%M%S}
+  data_path: "${hydra:runtime.cwd}/data"
+  output_path: "${hydra:runtime.cwd}/outputs/${general.timestamp}"
+
+wandb:
+  project: "dialogue-summary"
+  entity: "ailab_upstage_fastcampus"
+  name: ${general.timestamp}
+
+prompt:
+  n_samples: 2
+  save_predictions: true
+  version: 2
+  system: "You are a expert in the field of dialogue summarization..."
+  instruction: |
+    Following the instructions below...
+
+inference:
+  batch_size: 32
+  ckt_path: "${general.output_path}/checkpoint-500"
+  no_repeat_ngram_size: 3
+  early_stopping: true
+  generate_max_length: 128
+  num_beams: 5
+  remove_tokens: 
+    - <usr>
+    - <s>
+    - </s>
+    - <pad>
+
+url:
+  data: "https://aistages-api-public-prod.s3.amazonaws.com/app/Competitions/000342/data/data.tar.gz"
+  code: "https://aistages-api-public-prod.s3.amazonaws.com/app/Competitions/000342/data/code.tar.gz"
+
+metrics:
+  rouge-1: eval/rouge1_f1
+  rouge-2: eval/rouge2_f1
+  rouge-l: eval/rougeL_f1
+
+huggingface:
+  token: ${oc.env:HUGGINGFACE_TOKEN}
+  cache_dir: "${hydra:runtime.cwd}/../models"  # 상위 디렉토리의 models
