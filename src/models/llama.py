@@ -2,10 +2,17 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from src.models.base_model import BaseModel
 import torch
 from typing import List, Optional
-from peft import get_peft_model, LoraConfig, TaskType
+from peft import (
+    get_peft_model, 
+    LoraConfig, 
+    TaskType,
+    prepare_model_for_kbit_training
+)
 from pathlib import Path
 from omegaconf import OmegaConf
 from transformers.generation import StoppingCriteriaList, StoppingCriteria
+from transformers import BitsAndBytesConfig
+import bitsandbytes as bnb
 
 class StopWordsCriteria(StoppingCriteria):
     def __init__(self, stop_words, tokenizer, prompt_length):
@@ -44,42 +51,56 @@ class LlamaModel(BaseModel):
             self.model.print_trainable_parameters()
     
     def _init_model(self):
-        # cache_dir 설정 및 생성
-        cache_dir = Path(self.full_config.general.model_cache_dir)  # full_config에서 경로 가져오기
+        """모델 초기화 with 메모리 최적화"""
+        # 메모리 최적화 설정
+        torch.cuda.empty_cache()
+        
+        # cache_dir 설정
+        cache_dir = Path(self.full_config.general.model_cache_dir)
         cache_dir.mkdir(parents=True, exist_ok=True)
-        print(f"모델 캐시 디렉토리: {cache_dir}")
         
         # 토크나이저 초기화
-        try:
-            print(f"토크나이저 로드 중... ({self.config.name})")  # config.model.name -> config.name
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.config.name,  # config.model.name -> config.name
-                trust_remote_code=True,
-                cache_dir=cache_dir,
-                local_files_only=False
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.config.name,
+            trust_remote_code=True,
+            cache_dir=cache_dir
+        )
+        self.tokenizer.pad_token = self.tokenizer.eos_token
+        
+        # 모델 로드 시 메모리 효율적인 설정
+        model_kwargs = {
+            "torch_dtype": torch.float16,
+            "device_map": "auto",
+            "quantization_config": BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type="nf4"
+            ),
+            "cache_dir": cache_dir
+        }
+        
+        # LoRA 설정
+        if self.config.mode == "finetune":
+            peft_config = LoraConfig(
+                task_type=TaskType.CAUSAL_LM,
+                inference_mode=False,
+                r=self.config.lora.r,
+                lora_alpha=self.config.lora.alpha,
+                lora_dropout=self.config.lora.dropout,
+                target_modules=self.config.lora.target_modules,
+                bias="none",
+                modules_to_save=None
             )
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-            print("토크나이저 로드 완료")
             
             # 모델 초기화
-            print("모델 로드 중...")
             self.model = AutoModelForCausalLM.from_pretrained(
-                self.config.name,  # config.model.name -> config.name
-                trust_remote_code=True,
-                torch_dtype=getattr(torch, "float16"),
-                device_map="auto",
-                cache_dir=cache_dir,
-                local_files_only=False
+                self.config.name,
+                **model_kwargs
             )
-            print("모델 로드 완료")
-            
-        except Exception as e:
-            print(f"모델 로드 중 오류 발생: {str(e)}")
-            print(f"캐시 디렉토리 내용:")
-            if cache_dir.exists():
-                for item in cache_dir.iterdir():
-                    print(f" - {item}")
-            raise
+            self.model = prepare_model_for_kbit_training(self.model)  # 4bit 학습 준비
+            self.model = get_peft_model(self.model, peft_config)
+            self.model.print_trainable_parameters()
     
     def forward(self, **inputs):
         return self.model(**inputs)

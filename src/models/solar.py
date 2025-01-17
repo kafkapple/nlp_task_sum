@@ -88,12 +88,6 @@ class SolarAPI:
         )
         
         try:
-            print(f"API 요청 설정:")
-            print(f"- temperature: {self.generation_config['temperature']}")
-            print(f"- top_p: {self.generation_config['top_p']}")
-            print(f"- max_tokens: {self.generation_config['max_new_tokens']}")
-            print(f"- stop: {self.generation_config['stop_sequences']}")
-            
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,

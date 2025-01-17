@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - model: solar
+  - model: bllossom
 
 prompt_templates:
   "1":

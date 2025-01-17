@@ -89,6 +89,7 @@ class DataProcessor:
     def __init__(self, tokenizer, cfg):
         self.tokenizer = tokenizer
         self.cfg = cfg
+        self.config = cfg
         self.data_path = Path(cfg.general.data_path)
         # 초기화 시 seed 설정
         if hasattr(cfg.general, 'seed'):
@@ -149,13 +150,32 @@ class DataProcessor:
             
             if is_train:
                 labels = inputs['input_ids'].clone()
-                summary_start = (inputs['input_ids'] == self.tokenizer.encode("Summary:", add_special_tokens=False)[0]).nonzero()[0][1]
-                labels[0, :summary_start] = -100
+                
+                # "Summary:" 토큰의 위치를 더 안전하게 찾기
+                try:
+                    # 전체 텍스트에서 "Summary:" 위치 찾기
+                    summary_text_pos = prompt.find("Summary:")
+                    if summary_text_pos != -1:
+                        # Summary: 이전까지의 텍스트를 토크나이징
+                        prefix_tokens = self.tokenizer(
+                            prompt[:summary_text_pos],
+                            add_special_tokens=False
+                        )['input_ids']
+                        summary_start = len(prefix_tokens)
+                        
+                        # Summary: 이전 부분을 -100으로 마스킹
+                        labels[0, :summary_start] = -100
+                    else:
+                        # Summary: 를 찾지 못한 경우 전체를 마스킹
+                        labels[0, :] = -100
+                except:
+                    # 오류 발생 시 전체를 마스킹
+                    labels[0, :] = -100
             else:
                 labels = torch.full_like(inputs['input_ids'], -100)
             
             processed_data.append({
-                'input_ids': inputs['input_ids'][0].tolist(),  # numpy/list로 변환
+                'input_ids': inputs['input_ids'][0].tolist(),
                 'attention_mask': inputs['attention_mask'][0].tolist(),
                 'labels': labels[0].tolist()
             })

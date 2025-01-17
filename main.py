@@ -29,9 +29,16 @@ from src.utils.utils import save_predictions
 from src.utils.metrics import Metrics, compute_metrics
 from src.trainer import CustomTrainer
 
-def get_model_size(model):
-    """모델의 파라미터 수를 반환"""
-    return sum(p.numel() for p in model.parameters())
+def convert_to_basic_types(obj):
+    """OmegaConf 객체를 기본 Python 타입으로 변환"""
+    if isinstance(obj, (int, float, str, bool, type(None))):
+        return obj
+    elif isinstance(obj, (list, tuple)) or hasattr(obj, '_type'):  # ListConfig 포함
+        return [convert_to_basic_types(item) for item in obj]
+    elif isinstance(obj, dict):
+        return {k: convert_to_basic_types(v) for k, v in obj.items()}
+    else:
+        return str(obj)
 
 def init_wandb(cfg: DictConfig):
     """wandb 초기화"""
@@ -45,18 +52,6 @@ def init_wandb(cfg: DictConfig):
     # wandb 설정
     os.environ["WANDB_DIR"] = str(output_dir)
     
-    def convert_to_basic_types(obj):
-        if isinstance(obj, (int, float, str, bool)):
-            return obj
-        elif isinstance(obj, (list, tuple)):
-            return [convert_to_basic_types(item) for item in obj]
-        elif isinstance(obj, dict):
-            return {k: convert_to_basic_types(v) for k, v in obj.items()}
-        elif hasattr(obj, '_type'):  # OmegaConf 객체
-            return convert_to_basic_types(OmegaConf.to_container(obj, resolve=True))
-        else:
-            return str(obj)
-    
     # 설정을 기본 Python 타입으로 변환
     config_dict = convert_to_basic_types(OmegaConf.to_container(cfg, resolve=True))
     
@@ -66,14 +61,14 @@ def init_wandb(cfg: DictConfig):
         config=config_dict,
         group=cfg.model.family,
         dir=str(output_dir),
-        settings=wandb.Settings(
-            start_method="thread",
-            _disable_stats=True
-        )
+        settings=wandb.Settings(start_method="thread")
     )
     
-    print(f"Outputs will be saved to: {output_dir}")
     return output_dir
+
+def get_model_size(model):
+    """모델의 파라미터 수를 반환"""
+    return sum(p.numel() for p in model.parameters())
 
 def print_samples(original_texts: List[str], 
                  gold_summaries: List[str], 
@@ -107,6 +102,9 @@ def main(cfg: DictConfig):
     # 모든 random seed 설정
     setup_seeds(cfg.general.seed)
     pl.seed_everything(cfg.general.seed)
+    
+    # timestamp 정의
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     
     # output_dir 초기화
     output_dir = init_wandb(cfg)
@@ -196,12 +194,16 @@ def main(cfg: DictConfig):
         train_dataset = processor.prepare_dataset("train")
         val_dataset = processor.prepare_dataset("dev")
         
+        # 모든 training 설정을 기본 타입으로 변환
+        train_config = convert_to_basic_types(OmegaConf.to_container(cfg.train.training, resolve=True))
+        
         # Training arguments 설정
         training_args = Seq2SeqTrainingArguments(
             output_dir=str(output_dir),
-            learning_rate=cfg.train.training.learning_rate,
-            num_train_epochs=cfg.train.training.num_train_epochs,
-            per_device_train_batch_size=cfg.train.training.per_device_train_batch_size,
+            run_name=f"{cfg.model.name}_{cfg.model.mode}_{timestamp}",
+            learning_rate=train_config['learning_rate'],
+            num_train_epochs=train_config['num_train_epochs'],
+            per_device_train_batch_size=train_config['per_device_train_batch_size'],
             per_device_eval_batch_size=cfg.train.training.per_device_eval_batch_size,
             warmup_ratio=cfg.train.training.warmup_ratio,
             weight_decay=cfg.train.training.weight_decay,
@@ -219,6 +221,9 @@ def main(cfg: DictConfig):
             generation_num_beams=cfg.train.training.generation_num_beams,
             remove_unused_columns=cfg.train.training.remove_unused_columns
         )
+        
+        # wandb 콜백 비활성화 옵션 추가
+        training_args.report_to = []  # wandb 보고 비활성화
         
         trainer = CustomTrainer(
             model=model.model,
