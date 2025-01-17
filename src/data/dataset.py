@@ -20,21 +20,18 @@ def download_and_extract(url: str, data_path: str):
         
     # 데이터 다운로드
     print(f"데이터 다운로드 중... URL: {url}")
-    zip_path = data_path / "data.tar.gz"  # 확장자 변경
+    zip_path = data_path / "data.tar.gz"
     try:
         # requests 세션 생성 및 설정
         session = requests.Session()
-        session.verify = False  # SSL 검증 비활성화
+        session.verify = False
         
-        # 스트리밍 방식으로 다운로드
         response = session.get(url, stream=True)
         response.raise_for_status()
         
-        # 파일 크기 확인
         total_size = int(response.headers.get('content-length', 0))
         print(f"다운로드 파일 크기: {total_size/1024/1024:.2f} MB")
         
-        # 청크 단위로 파일 저장
         with open(zip_path, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
@@ -42,19 +39,22 @@ def download_and_extract(url: str, data_path: str):
                     
         print("다운로드 완료. 압축 해제 중...")
         
-        # 파일 크기 확인
         if os.path.getsize(zip_path) == 0:
             raise Exception("다운로드된 파일이 비어있습니다.")
             
-        # tar.gz 파일 압축 해제
         import tarfile
         try:
             with tarfile.open(zip_path, 'r:gz') as tar:
                 print("TAR 파일 내용:")
+                # 압축 해제 전에 파일 구조 확인
                 for member in tar.getmembers():
                     print(f" - {member.name}: {member.size:,} bytes")
+                    # data/ 폴더 안에 있는 파일들의 경로 수정
+                    if member.name.startswith('data/'):
+                        member.name = member.name.replace('data/', '', 1)
                 tar.extractall(path=data_path)
                 print("압축 해제 완료")
+                
         except tarfile.ReadError:
             print("TAR 파일이 아니거나 손상되었습니다.")
             raise

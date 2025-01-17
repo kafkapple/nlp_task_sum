@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - model: solar
+  - model: bllossom
   - train: default
 
 general:

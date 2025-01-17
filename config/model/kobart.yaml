@@ -1,6 +1,6 @@
 name: "gogamza/kobart-base-v2"
 type: "finetune"
-
+mode: "finetune"
 tokenizer:
   bos_token: "<s>"
   eos_token: "</s>"
