@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - model: kobart_sum_v3
+  - model: bllossom
   - train: default
 
 prompt_templates:
@@ -112,7 +112,7 @@ lora:
 train:
   training:
     learning_rate: 2e-5
-    num_train_epochs: 3
+    num_train_epochs: 2
     per_device_train_batch_size: 4
     per_device_eval_batch_size: 4
     warmup_ratio: 0.1

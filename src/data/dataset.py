@@ -90,8 +90,8 @@ class DataProcessor:
     def __init__(self, tokenizer, config, data_path):
         self.tokenizer = tokenizer
         self.config = config  # tokenizer 설정만 포함
-        self.data_path = Path(data_path)  # data_path 추가
-    
+        self.data_path = Path(data_path)
+        
     def load_data(self, data_path: str = None) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """데이터 로드"""
         data_path = Path(data_path or self.data_path)
@@ -120,8 +120,68 @@ class DataProcessor:
         df = pd.read_csv(self.data_path / f"{mode}.csv")
         is_train = mode == "train"
         
-        # BART 모델용 데이터셋만 준비 (llama 관련 코드 제거)
-        return self._prepare_bart_dataset(df, is_train)
+        # 토크나이저 설정 확인
+        if hasattr(self.config, 'encoder_max_len'):  # BART 모델
+            return self._prepare_bart_dataset(df, is_train)
+        else:  # LLaMA 모델
+            return self._prepare_llama_dataset(df, is_train)
+            
+    def _prepare_llama_dataset(self, df: pd.DataFrame, is_train: bool) -> HFDataset:
+        """Llama 모델용 데이터셋 준비"""
+        processed_data = []
+        for _, row in df.iterrows():
+            # 프롬프트 생성
+            if is_train:
+                prompt = f"Dialogue:\n{row['dialogue']}\nSummary:\n{row['summary']}"
+            else:
+                prompt = f"Dialogue:\n{row['dialogue']}\nSummary:"
+            
+            # 토크나이징
+            inputs = self.tokenizer(
+                prompt,
+                max_length=self.config.max_length,  # tokenizer.max_length 사용
+                padding='max_length',
+                truncation=True,
+                return_tensors='pt'
+            )
+            
+            if is_train:
+                labels = inputs['input_ids'].clone()
+                
+                # "Summary:" 토큰의 위치를 더 안전하게 찾기
+                try:
+                    # 전체 텍스트에서 "Summary:" 위치 찾기
+                    summary_text_pos = prompt.find("Summary:")
+                    if summary_text_pos != -1:
+                        # Summary: 이전까지의 텍스트를 토크나이징
+                        prefix_tokens = self.tokenizer(
+                            prompt[:summary_text_pos],
+                            add_special_tokens=False
+                        )['input_ids']
+                        summary_start = len(prefix_tokens)
+                        
+                        # Summary: 이전 부분을 -100으로 마스킹
+                        labels[0, :summary_start] = -100
+                    else:
+                        # Summary: 를 찾지 못한 경우 전체를 마스킹
+                        labels[0, :] = -100
+                except:
+                    # 오류 발생 시 전체를 마스킹
+                    labels[0, :] = -100
+            else:
+                labels = torch.full_like(inputs['input_ids'], -100)
+            
+            processed_data.append({
+                'input_ids': inputs['input_ids'][0].tolist(),
+                'attention_mask': inputs['attention_mask'][0].tolist(),
+                'labels': labels[0].tolist()
+            })
+        
+        return HFDataset.from_dict({
+            'input_ids': [d['input_ids'] for d in processed_data],
+            'attention_mask': [d['attention_mask'] for d in processed_data],
+            'labels': [d['labels'] for d in processed_data]
+        })
             
     def _prepare_bart_dataset(self, df: pd.DataFrame, is_train: bool) -> DialogueDataset:
         """Bart 모델용 데이터셋 준비"""
