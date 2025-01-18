@@ -1,0 +1,29 @@
+name: "gogamza/kobart-summarization"
+mode: "finetune"
+family: "bart"
+
+tokenizer:
+  max_length: 1026
+  padding: "max_length"
+  truncation: true
+  return_tensors: "pt"
+  padding_side: "right"
+  truncation_side: "right"
+  encoder_max_len: 1026
+  decoder_max_len: 300
+
+generation:
+  num_beams: 6
+  max_length: 300
+  min_length: 12
+  length_penalty: 1.0
+  repetition_penalty: 1.5
+  no_repeat_ngram_size: 15
+  early_stopping: true
+  bos_token_id: null
+  eos_token_id: null
+
+model:
+  trust_remote_code: true
+  torch_dtype: "float16"
+  device_map: "auto" 

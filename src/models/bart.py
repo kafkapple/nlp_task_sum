@@ -32,9 +32,20 @@ class BartSummarizer(nn.Module):
             self.config.name,
             cache_dir=self.full_config.general.model_cache_dir
         )
+        
+        # num_labels 파라미터 제거하고 필요한 설정만 전달
+        model_kwargs = {
+            "cache_dir": self.full_config.general.model_cache_dir
+        }
+        
+        # torch_dtype 설정이 있는 경우 추가
+        if hasattr(self.config, "model") and hasattr(self.config.model, "torch_dtype"):
+            if self.config.model.torch_dtype == "float16":
+                model_kwargs["torch_dtype"] = torch.float16
+        
         self.model = BartForConditionalGeneration.from_pretrained(
             self.config.name,
-            cache_dir=self.full_config.general.model_cache_dir
+            **model_kwargs
         ).to(self.device)
         
         # Add special tokens (if configured)

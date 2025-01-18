@@ -75,10 +75,11 @@ class DialogueDataset:
         # 기본 입력
         item = {k: v[idx] for k, v in self.encoder_input.items()}
         
-        # labels는 항상 포함 (없으면 -100으로 채움)
+        # labels가 있는 경우 추가
         if self.labels is not None:
-            item.update({k: v[idx] for k, v in self.labels.items()})
+            item['labels'] = self.labels['labels'][idx]
         else:
+            # labels가 없는 경우 -100으로 채움
             item['labels'] = torch.full_like(item['input_ids'], -100)
             
         return item
@@ -86,16 +87,11 @@ class DialogueDataset:
 class DataProcessor:
     """데이터 처리 및 데이터셋 생성 클래스"""
     
-    def __init__(self, tokenizer, cfg):
+    def __init__(self, tokenizer, config, data_path):
         self.tokenizer = tokenizer
-        self.cfg = cfg
-        self.config = cfg
-        self.data_path = Path(cfg.general.data_path)
-        # 초기화 시 seed 설정
-        if hasattr(cfg.general, 'seed'):
-            random.seed(cfg.general.seed)
-            np.random.seed(cfg.general.seed)
-            
+        self.config = config  # tokenizer 설정만 포함
+        self.data_path = Path(data_path)  # data_path 추가
+    
     def load_data(self, data_path: str = None) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """데이터 로드"""
         data_path = Path(data_path or self.data_path)
@@ -124,94 +120,45 @@ class DataProcessor:
         df = pd.read_csv(self.data_path / f"{mode}.csv")
         is_train = mode == "train"
         
-        if self.config.model.family == "llama":
-            return self._prepare_llama_dataset(df, is_train)
-        else:
-            return self._prepare_bart_dataset(df, is_train)
+        # BART 모델용 데이터셋만 준비 (llama 관련 코드 제거)
+        return self._prepare_bart_dataset(df, is_train)
             
-    def _prepare_llama_dataset(self, df: pd.DataFrame, is_train: bool) -> HFDataset:
-        """Llama 모델용 데이터셋 준비"""
-        processed_data = []
-        for _, row in df.iterrows():
-            # 프롬프트 생성
-            if is_train:
-                prompt = f"Dialogue:\n{row['dialogue']}\nSummary:\n{row['summary']}"
-            else:
-                prompt = f"Dialogue:\n{row['dialogue']}\nSummary:"
-            
-            # 토크나이징
-            inputs = self.tokenizer(
-                prompt,
-                max_length=self.config.model.tokenizer.max_length,
-                padding='max_length',
-                truncation=True,
-                return_tensors='pt'
-            )
-            
-            if is_train:
-                labels = inputs['input_ids'].clone()
-                
-                # "Summary:" 토큰의 위치를 더 안전하게 찾기
-                try:
-                    # 전체 텍스트에서 "Summary:" 위치 찾기
-                    summary_text_pos = prompt.find("Summary:")
-                    if summary_text_pos != -1:
-                        # Summary: 이전까지의 텍스트를 토크나이징
-                        prefix_tokens = self.tokenizer(
-                            prompt[:summary_text_pos],
-                            add_special_tokens=False
-                        )['input_ids']
-                        summary_start = len(prefix_tokens)
-                        
-                        # Summary: 이전 부분을 -100으로 마스킹
-                        labels[0, :summary_start] = -100
-                    else:
-                        # Summary: 를 찾지 못한 경우 전체를 마스킹
-                        labels[0, :] = -100
-                except:
-                    # 오류 발생 시 전체를 마스킹
-                    labels[0, :] = -100
-            else:
-                labels = torch.full_like(inputs['input_ids'], -100)
-            
-            processed_data.append({
-                'input_ids': inputs['input_ids'][0].tolist(),
-                'attention_mask': inputs['attention_mask'][0].tolist(),
-                'labels': labels[0].tolist()
-            })
-        
-        # HuggingFace Dataset 생성
-        return HFDataset.from_dict({
-            'input_ids': [d['input_ids'] for d in processed_data],
-            'attention_mask': [d['attention_mask'] for d in processed_data],
-            'labels': [d['labels'] for d in processed_data]
-        })
-        
     def _prepare_bart_dataset(self, df: pd.DataFrame, is_train: bool) -> DialogueDataset:
         """Bart 모델용 데이터셋 준비"""
         encoder_input = self.tokenizer(
             df['dialogue'].tolist(),
-            max_length=self.config.tokenizer.encoder_max_len,
+            max_length=self.config.encoder_max_len,
             padding='max_length',
             truncation=True,
             return_tensors='pt'
         )
         
-        labels = None
         if is_train:
-            labels = self.tokenizer(
+            # 레이블 데이터 준비
+            decoder_input = self.tokenizer(
                 df['summary'].tolist(),
-                max_length=self.config.tokenizer.decoder_max_len,
+                max_length=self.config.decoder_max_len,
                 padding='max_length',
                 truncation=True,
                 return_tensors='pt'
             )
             
+            # labels는 decoder input과 동일하지만, padding token을 -100으로 변경
+            labels = decoder_input['input_ids'].clone()
+            labels[labels == self.tokenizer.pad_token_id] = -100
+            
+            # labels를 딕셔너리 형태로 전달
+            labels_dict = {
+                'labels': labels
+            }
+        else:
+            labels_dict = None
+            
         return DialogueDataset(
             encoder_input=encoder_input,
-            labels=labels,
+            labels=labels_dict,
             tokenizer=self.tokenizer
-        ) 
+        )
 
 def load_dataset(data_path: str, split: str):
     """데이터셋 로드"""

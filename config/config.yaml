@@ -1,6 +1,7 @@
 defaults:
   - _self_
-  - model: bllossom
+  - model: kobart_sum_v3
+  - train: default
 
 prompt_templates:
   "1":
@@ -55,15 +56,15 @@ prompt_templates:
       Dialogue: {dialogue}
       Summary:
 
-general: 
-  seed: 1 #42
+general:
+  seed: 42
   timestamp: ${now:%Y%m%d_%H%M%S}
-  data_path: "${hydra:runtime.cwd}/data"
-  output_path: "${hydra:runtime.cwd}/outputs/${general.timestamp}"
+  data_path: "data"
+  output_path: "outputs/${now:%Y%m%d_%H%M%S}"
   model_cache_dir: "${hydra:runtime.cwd}/../models"
 
 wandb:
-  project: "dialogue-summary"
+  project: "dialogue_summary"
   entity: "ailab_upstage_fastcampus"
   name: ${general.timestamp}
 

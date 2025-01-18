@@ -190,7 +190,11 @@ def main(cfg: DictConfig):
         )
         
     else:  # finetune 모드
-        processor = DataProcessor(model.tokenizer, cfg)
+        processor = DataProcessor(
+            tokenizer=model.tokenizer,
+            config=cfg.model.tokenizer,  # tokenizer 설정
+            data_path=cfg.general.data_path  # data_path 추가
+        )
         train_dataset = processor.prepare_dataset("train")
         val_dataset = processor.prepare_dataset("dev")
         
