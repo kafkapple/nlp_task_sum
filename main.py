@@ -201,29 +201,46 @@ def main(cfg: DictConfig):
         training_args = Seq2SeqTrainingArguments(
             output_dir=str(output_dir),
             run_name=f"{cfg.model.name}_{cfg.model.mode}_{timestamp}",
+            
+            # 학습 설정
             learning_rate=train_config['learning_rate'],
             num_train_epochs=train_config['num_train_epochs'],
+            warmup_ratio=train_config['warmup_ratio'],
+            weight_decay=train_config['weight_decay'],
+            
+            # 배치 및 최적화 설정
             per_device_train_batch_size=train_config['per_device_train_batch_size'],
-            per_device_eval_batch_size=cfg.train.training.per_device_eval_batch_size,
-            warmup_ratio=cfg.train.training.warmup_ratio,
-            weight_decay=cfg.train.training.weight_decay,
-            fp16=cfg.train.training.fp16,
-            evaluation_strategy=cfg.train.training.evaluation_strategy,
-            save_strategy=cfg.train.training.save_strategy,
-            save_total_limit=cfg.train.training.save_total_limit,
-            load_best_model_at_end=cfg.train.training.load_best_model_at_end,
-            metric_for_best_model=cfg.train.training.metric_for_best_model,
-            greater_is_better=cfg.train.training.greater_is_better,
-            gradient_checkpointing=cfg.train.training.gradient_checkpointing,
-            gradient_accumulation_steps=cfg.train.training.gradient_accumulation_steps,
-            predict_with_generate=cfg.train.training.predict_with_generate,
-            generation_max_length=cfg.train.training.generation_max_length,
-            generation_num_beams=cfg.train.training.generation_num_beams,
-            remove_unused_columns=cfg.train.training.remove_unused_columns
+            per_device_eval_batch_size=train_config['per_device_eval_batch_size'],
+            gradient_accumulation_steps=train_config['gradient_accumulation_steps'],
+            gradient_checkpointing=train_config['gradient_checkpointing'],
+            max_grad_norm=train_config['max_grad_norm'],
+            
+            # 하드웨어 최적화
+            fp16=train_config['fp16'],
+            bf16=train_config['bf16'],
+            optim=train_config['optim'],
+            
+            # 평가 및 저장 전략
+            evaluation_strategy=train_config['evaluation_strategy'],
+            save_strategy=train_config['save_strategy'],
+            save_total_limit=train_config['save_total_limit'],
+            load_best_model_at_end=train_config['load_best_model_at_end'],
+            metric_for_best_model=train_config['metric_for_best_model'],
+            greater_is_better=train_config['greater_is_better'],
+            
+            # 생성 설정
+            predict_with_generate=True,
+            generation_max_length=cfg.model.tokenizer.max_length,  # 입력 길이와 동일하게
+            generation_num_beams=cfg.model.generation.num_beams,
+            generation_config=OmegaConf.to_container(cfg.model.generation),  # 전체 생성 설정 전달
+            
+            # 로깅
+            logging_steps=train_config['logging_steps'],
+            logging_first_step=train_config['logging_first_step'],
+            
+            # wandb 비활성화
+            report_to=[]
         )
-        
-        # wandb 콜백 비활성화 옵션 추가
-        training_args.report_to = []  # wandb 보고 비활성화
         
         trainer = CustomTrainer(
             model=model.model,
