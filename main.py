@@ -197,6 +197,27 @@ def main(cfg: DictConfig):
         # 모든 training 설정을 기본 타입으로 변환
         train_config = convert_to_basic_types(OmegaConf.to_container(cfg.train.training, resolve=True))
         
+        # 설정 확인을 위한 디버그 출력
+        print("\n=== Training Config ===")
+        for k, v in train_config.items():
+            print(f"{k}: {v}")
+        print("=====================\n")
+        
+        # 누락된 키에 대한 기본값 설정
+        default_config = {
+            'max_grad_norm': 1.0,
+            'predict_with_generate': True,
+            'remove_unused_columns': True,
+            'logging_steps': 10,
+            'logging_first_step': True
+        }
+        
+        # 누락된 키 추가
+        for k, v in default_config.items():
+            if k not in train_config:
+                train_config[k] = v
+                print(f"Added missing config: {k} = {v}")
+        
         # Training arguments 설정
         training_args = Seq2SeqTrainingArguments(
             output_dir=str(output_dir),
