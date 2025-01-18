@@ -25,5 +25,4 @@ generation:
 
 model:
   trust_remote_code: true
-  torch_dtype: "float16"
   device_map: "auto" 
