@@ -294,13 +294,15 @@ def main(cfg: DictConfig):
             report_to=[]
         )
         
+        # CustomTrainer 초기화
         trainer = CustomTrainer(
             model=model.model,
             args=training_args,
             train_dataset=train_dataset,
             eval_dataset=val_dataset,
             tokenizer=model.tokenizer,
-            compute_metrics=compute_metrics
+            compute_metrics=compute_metrics,  # compute_metrics 함수 직접 전달
+            remove_tokens=cfg.inference.remove_tokens  # 특수 토큰 목록 전달
         )
         
         trainer.train()

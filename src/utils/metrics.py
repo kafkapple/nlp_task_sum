@@ -27,17 +27,21 @@ class Metrics:
 from rouge import Rouge
 import numpy as np
 
-def compute_metrics(tokenizer, pred, config):
+def compute_metrics(pred):
+    """
+    Trainer용 메트릭 계산 함수
+    pred: EvalPrediction 객체 (predictions, label_ids 속성을 가짐)
+    """
     labels_ids = pred.label_ids
     pred_ids = pred.predictions
     
-    # 디코딩
-    pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-    labels_ids[labels_ids == -100] = tokenizer.pad_token_id
-    label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
+    # 디코딩은 trainer가 가진 tokenizer 사용
+    pred_str = trainer.tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+    labels_ids[labels_ids == -100] = trainer.tokenizer.pad_token_id
+    label_str = trainer.tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
     
     # 특수 토큰 제거
-    for token in config.inference.remove_tokens:
+    for token in trainer.args.remove_tokens:
         pred_str = [pred.replace(token, '').strip() for pred in pred_str]
         label_str = [label.replace(token, '').strip() for label in label_str]
     

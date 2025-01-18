@@ -36,7 +36,12 @@ class WandBCallback(TrainerCallback):
         wandb.log(clean_logs)
 
 class CustomTrainer(Seq2SeqTrainer):
-    def __init__(self, *args, **kwargs):
-        kwargs["callbacks"] = [WandBCallback()]  # 우리의 콜백만 사용
+    def __init__(self, *args, remove_tokens=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.args.report_to = []  # 기본 wandb 로깅 비활성화 
+        self.remove_tokens = remove_tokens or []
+        
+    def compute_metrics(self, pred):
+        """
+        compute_metrics 래퍼 함수
+        """
+        return self.args.compute_metrics(pred) 
