@@ -205,11 +205,39 @@ def main(cfg: DictConfig):
         
         # 누락된 키에 대한 기본값 설정
         default_config = {
+            # 기본 학습 설정
             'max_grad_norm': 1.0,
-            'predict_with_generate': True,
-            'remove_unused_columns': True,
+            'learning_rate': 2e-4,
+            'num_train_epochs': 3,
+            'warmup_ratio': 0.1,
+            'weight_decay': 0.01,
+            
+            # 배치 및 메모리 최적화
+            'per_device_train_batch_size': 2,
+            'per_device_eval_batch_size': 2,
+            'gradient_accumulation_steps': 8,
+            'gradient_checkpointing': True,
+            
+            # 하드웨어 최적화
+            'fp16': True,
+            'bf16': False,
+            'optim': 'paged_adamw_8bit',
+            
+            # 평가 및 저장 전략
+            'evaluation_strategy': 'epoch',
+            'save_strategy': 'epoch',
+            'save_total_limit': 2,
+            'load_best_model_at_end': True,
+            'metric_for_best_model': 'eval_rouge1_f1',
+            'greater_is_better': True,
+            
+            # 로깅
             'logging_steps': 10,
-            'logging_first_step': True
+            'logging_first_step': True,
+            
+            # 생성 관련
+            'predict_with_generate': True,
+            'remove_unused_columns': True
         }
         
         # 누락된 키 추가
@@ -251,9 +279,8 @@ def main(cfg: DictConfig):
             
             # 생성 설정
             predict_with_generate=True,
-            generation_max_length=cfg.model.tokenizer.max_length,  # 입력 길이와 동일하게
+            generation_max_length=cfg.model.tokenizer.max_length,
             generation_num_beams=cfg.model.generation.num_beams,
-            generation_config=OmegaConf.to_container(cfg.model.generation),  # 전체 생성 설정 전달
             
             # 로깅
             logging_steps=train_config['logging_steps'],
