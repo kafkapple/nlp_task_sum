@@ -26,7 +26,7 @@ from omegaconf import OmegaConf
 from src.data.dataset import DataProcessor, download_and_extract, load_dataset
 from src.models.model_factory import ModelFactory
 from src.utils.utils import save_predictions
-from src.utils.metrics import Metrics, compute_metrics
+from src.utils.metrics import Metrics, compute_metrics, TrainerMetrics
 from src.trainer import CustomTrainer
 
 def convert_to_basic_types(obj):
@@ -294,6 +294,12 @@ def main(cfg: DictConfig):
             report_to=[]
         )
         
+        # 메트릭 계산기 초기화
+        metrics = TrainerMetrics(
+            tokenizer=model.tokenizer,
+            remove_tokens=cfg.inference.remove_tokens
+        )
+        
         # CustomTrainer 초기화
         trainer = CustomTrainer(
             model=model.model,
@@ -301,8 +307,8 @@ def main(cfg: DictConfig):
             train_dataset=train_dataset,
             eval_dataset=val_dataset,
             tokenizer=model.tokenizer,
-            compute_metrics=compute_metrics,  # compute_metrics 함수 직접 전달
-            remove_tokens=cfg.inference.remove_tokens  # 특수 토큰 목록 전달
+            compute_metrics=metrics,  # 메트릭 계산기 객체 전달
+            remove_tokens=cfg.inference.remove_tokens
         )
         
         trainer.train()
