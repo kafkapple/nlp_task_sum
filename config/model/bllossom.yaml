@@ -14,14 +14,17 @@ model:
   torch_dtype: "float16"
   device_map: "auto"
 
-# 생성 설정을 최상위로 이동
+# 생성 설정
 generation:
   max_new_tokens: 128
+  min_new_tokens: 10
   temperature: 0.3
   top_p: 0.95
   do_sample: true
   num_beams: 5
   length_penalty: 1.0
+  repetition_penalty: 1.2
+  no_repeat_ngram_size: 3
 
 # 양자화 설정 강화
 quantization:
@@ -40,15 +43,37 @@ lora:
     "q_proj", "k_proj", "v_proj", "o_proj",
     "gate_proj", "up_proj", "down_proj"
   ]
+  task_type: "CAUSAL_LM"
+  bias: "none"
+  modules_to_save: null
+  fan_in_fan_out: false
+  inference_mode: false
 
 # 학습 설정 최적화
 train:
   training:
+    num_train_epochs: 3
+    learning_rate: 2e-4
+    warmup_ratio: 0.1
+    weight_decay: 0.01
+    
     per_device_train_batch_size: 2
+    per_device_eval_batch_size: 2
     gradient_accumulation_steps: 8
     gradient_checkpointing: true
+    max_grad_norm: 1.0
+    
     fp16: true
     bf16: false
-    max_grad_norm: 1.0
     optim: "paged_adamw_8bit"
+    
+    evaluation_strategy: "epoch"
+    save_strategy: "epoch"
+    save_total_limit: 2
+    load_best_model_at_end: true
+    metric_for_best_model: "eval_rouge1_f1"
+    greater_is_better: true
+    
+    logging_steps: 10
+    logging_first_step: true
  
