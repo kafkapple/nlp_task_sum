@@ -26,7 +26,7 @@ from omegaconf import OmegaConf
 from src.data.dataset import DataProcessor, download_and_extract, load_dataset
 from src.models.model_factory import ModelFactory
 from src.utils.utils import save_predictions
-from src.utils.metrics import Metrics, compute_metrics, TrainerMetrics
+from src.utils.metrics import Metrics, TrainerMetrics
 from src.trainer import CustomTrainer
 
 def convert_to_basic_types(obj):
