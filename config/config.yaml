@@ -64,7 +64,7 @@ general:
   model_cache_dir: "${hydra:runtime.cwd}/../models"
 
 wandb:
-  project: "dialogue_summary"
+  project: "dialogue_summarization"
   entity: "ailab_upstage_fastcampus"
   name: ${general.timestamp}
 

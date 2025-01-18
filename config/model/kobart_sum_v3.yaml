@@ -1,4 +1,4 @@
-name: "gogamza/kobart-summarization"
+name: "EbanLee/kobart-summary-v3"
 mode: "finetune"
 family: "bart"
 
