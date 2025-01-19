@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore", message=".*beta.*")
 
 from pathlib import Path
 import wandb
-from transformers import Seq2SeqTrainingArguments
+from transformers import Seq2SeqTrainingArguments, GenerationConfig
 import pytorch_lightning as pl
 from datetime import datetime
 from omegaconf import OmegaConf
@@ -250,6 +250,19 @@ def main(cfg: DictConfig):
                 train_config[k] = v
                 print(f"Added missing config: {k} = {v}")
         
+        # Generation config 생성
+        generation_config = GenerationConfig(
+            max_new_tokens=cfg.model.generation.max_new_tokens,
+            min_new_tokens=cfg.model.generation.min_new_tokens,
+            temperature=cfg.model.generation.temperature,
+            top_p=cfg.model.generation.top_p,
+            do_sample=cfg.model.generation.do_sample,
+            num_beams=cfg.model.generation.num_beams,
+            length_penalty=cfg.model.generation.length_penalty,
+            repetition_penalty=cfg.model.generation.repetition_penalty,
+            no_repeat_ngram_size=cfg.model.generation.no_repeat_ngram_size
+        )
+
         # Training arguments 설정
         training_args = Seq2SeqTrainingArguments(
             output_dir=str(output_dir),
@@ -283,8 +296,8 @@ def main(cfg: DictConfig):
             
             # 생성 설정
             predict_with_generate=True,
-            generation_max_length=cfg.model.tokenizer.max_length,
             generation_num_beams=cfg.model.generation.num_beams,
+            generation_config=generation_config,  # GenerationConfig 객체 전달
             
             # 로깅
             logging_steps=train_config['logging_steps'],
