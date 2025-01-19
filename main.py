@@ -278,8 +278,8 @@ def main(cfg: DictConfig):
             save_strategy=train_config['save_strategy'],
             save_total_limit=train_config['save_total_limit'],
             load_best_model_at_end=train_config['load_best_model_at_end'],
-            metric_for_best_model=train_config['metric_for_best_model'],
-            greater_is_better=train_config['greater_is_better'],
+            metric_for_best_model='eval_rouge1_f1',
+            greater_is_better=True,
             
             # 생성 설정
             predict_with_generate=True,

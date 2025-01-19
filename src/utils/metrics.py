@@ -66,9 +66,9 @@ class TrainerMetrics:
             scores = self.rouge.get_scores(pred_str, label_str, avg=True)
             
             return {
-                'rouge1_f1': scores['rouge-1']['f'],
-                'rouge2_f1': scores['rouge-2']['f'],
-                'rougeL_f1': scores['rouge-l']['f']
+                'eval_rouge1_f1': scores['rouge-1']['f'],
+                'eval_rouge2_f1': scores['rouge-2']['f'],
+                'eval_rougeL_f1': scores['rouge-l']['f']
             }
             
         except Exception as e:
@@ -78,7 +78,7 @@ class TrainerMetrics:
             print(f"예측 ID 범위: [{pred_ids.min()}, {pred_ids.max()}]")
             print(f"레이블 ID 범위: [{labels_ids.min()}, {labels_ids.max()}]")
             return {
-                'rouge1_f1': 0.0,
-                'rouge2_f1': 0.0,
-                'rougeL_f1': 0.0
+                'eval_rouge1_f1': 0.0,
+                'eval_rouge2_f1': 0.0,
+                'eval_rougeL_f1': 0.0
             } 

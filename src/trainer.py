@@ -18,15 +18,17 @@ class WandBCallback(TrainerCallback):
             wandb.config.update({"training": self.training_config}, allow_val_change=True)
     
     def on_log(self, args, state, control, logs: Dict[str, Any] = None, **kwargs):
-        """메트릭 로깅"""
         if not logs:
             return
             
-        # 기본 메트릭만 로깅
-        clean_logs = {
-            k: v for k, v in logs.items() 
-            if isinstance(v, (int, float))
-        }
+        clean_logs = {}
+        for k, v in logs.items():
+            if isinstance(v, (int, float)):
+                # eval_ 접두사를 eval/로 변환하여 wandb에 로깅
+                if k.startswith('eval_'):
+                    clean_logs[k.replace('eval_', 'eval/')] = v
+                else:
+                    clean_logs[f'train/{k}'] = v
         
         if state.epoch is not None:
             clean_logs["epoch"] = round(state.epoch, 2)
