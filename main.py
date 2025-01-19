@@ -283,8 +283,8 @@ def main(cfg: DictConfig):
             
             # 생성 설정
             predict_with_generate=True,
-            generation_max_length=cfg.model.tokenizer.max_length,
             generation_num_beams=cfg.model.generation.num_beams,
+            max_new_tokens=cfg.model.generation.max_new_tokens,
             
             # 로깅
             logging_steps=train_config['logging_steps'],

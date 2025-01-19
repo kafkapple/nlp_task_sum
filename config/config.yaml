@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - model: kobart_sum_v3
+  - model: bllossom
   - train: default
 
 prompt_templates:
