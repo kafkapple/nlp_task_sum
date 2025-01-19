@@ -284,7 +284,17 @@ def main(cfg: DictConfig):
             # 생성 설정
             predict_with_generate=True,
             generation_num_beams=cfg.model.generation.num_beams,
-            max_new_tokens=cfg.model.generation.max_new_tokens,
+            generation_config={
+                "max_new_tokens": cfg.model.generation.max_new_tokens,
+                "min_new_tokens": cfg.model.generation.min_new_tokens,
+                "temperature": cfg.model.generation.temperature,
+                "top_p": cfg.model.generation.top_p,
+                "do_sample": cfg.model.generation.do_sample,
+                "num_beams": cfg.model.generation.num_beams,
+                "length_penalty": cfg.model.generation.length_penalty,
+                "repetition_penalty": cfg.model.generation.repetition_penalty,
+                "no_repeat_ngram_size": cfg.model.generation.no_repeat_ngram_size
+            },
             
             # 로깅
             logging_steps=train_config['logging_steps'],
