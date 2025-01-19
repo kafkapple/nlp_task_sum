@@ -1,4 +1,4 @@
-from transformers import Seq2SeqTrainer, TrainerCallback, GenerationConfig
+from transformers import Seq2SeqTrainer, TrainerCallback, GenerationConfig, PreTrainedTokenizerBase
 from typing import Dict, Any
 import wandb
 import torch
@@ -54,7 +54,7 @@ class WandBCallback(TrainerCallback):
 
 class TrainerMetrics:
     def __init__(self, tokenizer, remove_tokens=None):
-        self.tokenizer = tokenizer
+        self.processing_class = tokenizer  # tokenizer 대신 processing_class로 저장
         self.remove_tokens = remove_tokens or []
         self.rouge = Rouge()
         self.problem_samples = []  # 문제 샘플 저장용
@@ -72,9 +72,9 @@ class TrainerMetrics:
         predictions = predictions.clip(min=0)
         
         # 디코딩
-        decoded_preds = self.tokenizer.batch_decode(predictions, skip_special_tokens=True)
-        labels = np.where(labels != -100, labels, self.tokenizer.pad_token_id)
-        decoded_labels = self.tokenizer.batch_decode(labels, skip_special_tokens=True)
+        decoded_preds = self.processing_class.batch_decode(predictions, skip_special_tokens=True)
+        labels = np.where(labels != -100, labels, self.processing_class.pad_token_id)
+        decoded_labels = self.processing_class.batch_decode(labels, skip_special_tokens=True)
         
         # 빈 문자열 체크 및 기록
         empty_samples = []
@@ -127,8 +127,8 @@ class TrainerMetrics:
         """문제가 있는 샘플들을 기록"""
         for idx in indices:
             try:
-                pred_text = self.tokenizer.decode(predictions[idx], skip_special_tokens=True)
-                label_text = self.tokenizer.decode(labels[idx], skip_special_tokens=True)
+                pred_text = self.processing_class.decode(predictions[idx], skip_special_tokens=True)
+                label_text = self.processing_class.decode(labels[idx], skip_special_tokens=True)
                 self.problem_samples.append([
                     problem_type,
                     int(idx),
@@ -143,21 +143,23 @@ class CustomTrainer(Seq2SeqTrainer):
         super().__init__(*args, **kwargs)
         self.remove_tokens = remove_tokens or []
         
+        # tokenizer를 processing_class로 설정
+        if isinstance(self.tokenizer, PreTrainedTokenizerBase):
+            self.processing_class = self.tokenizer
+        
         # 모델의 특수 토큰 ID 저장
         self._save_model_special_tokens()
         
     def _save_model_special_tokens(self):
         """모델의 특수 토큰 ID를 저장"""
         self.special_tokens = {
-            "bos_token_id": self.tokenizer.bos_token_id,
-            "eos_token_id": self.tokenizer.eos_token_id,
-            "pad_token_id": self.tokenizer.pad_token_id
+            "bos_token_id": self.processing_class.bos_token_id,
+            "eos_token_id": self.processing_class.eos_token_id,
+            "pad_token_id": self.processing_class.pad_token_id
         }
         
         # 모델 config에도 설정
         self.model.config.decoder_start_token_id = self.special_tokens["bos_token_id"]
-        self.model.config.bos_token_id = self.special_tokens["bos_token_id"]
-        self.model.config.eos_token_id = self.special_tokens["eos_token_id"]
         self.model.config.forced_bos_token_id = self.special_tokens["bos_token_id"]
         self.model.config.forced_eos_token_id = self.special_tokens["eos_token_id"]
         
