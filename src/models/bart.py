@@ -23,19 +23,20 @@ class DialogueSummarizerConfig:
 class BartSummarizer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.config = config.model  # 모델 관련 설정
-        self.full_config = config   # 전체 설정
+        self.config = config.model
+        self.full_config = config
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        # 토크나이저와 모델 초기화
+        # 1. 토크나이저 초기화
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.config.name,
             cache_dir=self.full_config.general.model_cache_dir
         )
         
-        # num_labels 파라미터 제거하고 필요한 설정만 전달
+        # 2. 모델 초기화 - 불필요한 분류 관련 파라미터 제거
         model_kwargs = {
-            "cache_dir": self.full_config.general.model_cache_dir
+            "cache_dir": self.full_config.general.model_cache_dir,
+            "problem_type": "seq2seq_lm",  # 명시적으로 seq2seq 태스크임을 지정
         }
         
         # torch_dtype 설정이 있는 경우 추가
@@ -47,6 +48,25 @@ class BartSummarizer(nn.Module):
             self.config.name,
             **model_kwargs
         ).to(self.device)
+        
+        # 3. 특수 토큰 설정
+        self.model.config.decoder_start_token_id = self.tokenizer.bos_token_id
+        self.model.config.forced_bos_token_id = self.tokenizer.bos_token_id
+        self.model.config.forced_eos_token_id = self.tokenizer.eos_token_id
+        
+        # 4. 분류 관련 속성 제거
+        if hasattr(self.model.config, "num_labels"):
+            delattr(self.model.config, "num_labels")
+        if hasattr(self.model.config, "id2label"):
+            delattr(self.model.config, "id2label")
+        if hasattr(self.model.config, "label2id"):
+            delattr(self.model.config, "label2id")
+        
+        # 디버깅을 위한 설정 출력
+        print("\nSpecial token settings:")
+        print(f"decoder_start_token_id: {self.model.config.decoder_start_token_id}")
+        print(f"bos_token_id: {self.model.config.bos_token_id}")
+        print(f"eos_token_id: {self.model.config.eos_token_id}")
         
         # Add special tokens (if configured)
         if hasattr(self.config, 'tokenizer') and hasattr(self.config.tokenizer, 'special_tokens'):
