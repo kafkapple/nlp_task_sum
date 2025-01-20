@@ -27,7 +27,7 @@ from src.data.dataset import DataProcessor, download_and_extract, load_dataset
 from src.models.model_factory import ModelFactory
 from src.utils.utils import save_predictions
 from src.utils.metrics import Metrics, TrainerMetrics
-from src.trainer import CustomTrainer
+from src.trainer import CustomTrainer, WandBCallback
 
 def convert_to_basic_types(obj):
     """OmegaConf 객체를 기본 Python 타입으로 변환"""
@@ -252,15 +252,19 @@ def main(cfg: DictConfig):
         
         # Generation config 생성
         generation_config = GenerationConfig(
-            max_new_tokens=cfg.model.generation.max_new_tokens,
-            min_new_tokens=cfg.model.generation.min_new_tokens,
-            temperature=cfg.model.generation.temperature,
-            top_p=cfg.model.generation.top_p,
-            do_sample=cfg.model.generation.do_sample,
+            max_length=cfg.model.generation.max_length,
+            min_length=cfg.model.generation.min_length,
             num_beams=cfg.model.generation.num_beams,
             length_penalty=cfg.model.generation.length_penalty,
             repetition_penalty=cfg.model.generation.repetition_penalty,
-            no_repeat_ngram_size=cfg.model.generation.no_repeat_ngram_size
+            no_repeat_ngram_size=cfg.model.generation.no_repeat_ngram_size,
+            early_stopping=cfg.model.generation.early_stopping,
+            bos_token_id=cfg.model.generation.bos_token_id,
+            eos_token_id=cfg.model.generation.eos_token_id,
+            decoder_start_token_id=cfg.model.generation.decoder_start_token_id,
+            pad_token_id=model.tokenizer.pad_token_id,
+            forced_bos_token_id=None,
+            forced_eos_token_id=None
         )
 
         # Training arguments 설정
@@ -320,8 +324,9 @@ def main(cfg: DictConfig):
             train_dataset=train_dataset,
             eval_dataset=val_dataset,
             tokenizer=model.tokenizer,
-            compute_metrics=metrics,  # 메트릭 계산기 객체 전달
-            remove_tokens=cfg.inference.remove_tokens
+            compute_metrics=metrics,
+            remove_tokens=cfg.inference.remove_tokens,
+            callbacks=[WandBCallback()]  # WandB 콜백 명시적 추가
         )
         
         trainer.train()
