@@ -54,89 +54,81 @@ class WandBCallback(TrainerCallback):
 
 class TrainerMetrics:
     def __init__(self, tokenizer, remove_tokens=None):
-        self.processing_class = tokenizer  # tokenizer 대신 processing_class로 저장
+        self.processing_class = tokenizer
         self.remove_tokens = remove_tokens or []
         self.rouge = Rouge()
-        self.problem_samples = []  # 문제 샘플 저장용
         
     def __call__(self, eval_preds):
         predictions, labels = eval_preds
         
-        # 음수값 처리 전 문제 샘플 기록
+        print("\n=== TrainerMetrics Debug ===")
+        print(f"Input shapes - Predictions: {predictions.shape}, Labels: {labels.shape}")
+        
+        # 음수값 처리
         if isinstance(predictions, tuple):
             predictions = predictions[0]
-        negative_indices = np.where(predictions < 0)
-        if negative_indices[0].size > 0:
-            self.log_problem_samples("negative_values", predictions, labels, negative_indices)
-            
         predictions = predictions.clip(min=0)
-        
-        # 디코딩
-        decoded_preds = self.processing_class.batch_decode(predictions, skip_special_tokens=True)
         labels = np.where(labels != -100, labels, self.processing_class.pad_token_id)
-        decoded_labels = self.processing_class.batch_decode(labels, skip_special_tokens=True)
         
-        # 빈 문자열 체크 및 기록
-        empty_samples = []
-        for i, (pred, label) in enumerate(zip(decoded_preds, decoded_labels)):
-            if not pred.strip() or not label.strip():
-                empty_samples.append(i)
-                self.log_problem_samples("empty_string", predictions, labels, [i])
-        
-        # 불필요한 토큰 제거 및 공백 정리
-        decoded_preds = [pred.strip() for pred in decoded_preds]
-        decoded_labels = [label.strip() for label in decoded_labels]
-        
-        for token in self.remove_tokens:
-            decoded_preds = [pred.replace(token, "") for pred in decoded_preds]
-            decoded_labels = [label.replace(token, "") for label in decoded_labels]
-        
-        # 빈 문자열을 "empty"로 대체
-        decoded_preds = [pred if pred.strip() else "empty" for pred in decoded_preds]
-        decoded_labels = [label if label.strip() else "empty" for label in decoded_labels]
+        print(f"Token ranges - Predictions: [{predictions.min()}, {predictions.max()}], Labels: [{labels.min()}, {labels.max()}]")
         
         try:
+            # 디코딩
+            decoded_preds = self.processing_class.batch_decode(predictions, skip_special_tokens=True)
+            decoded_labels = self.processing_class.batch_decode(labels, skip_special_tokens=True)
+            
+            # 샘플 출력
+            print("\n=== Sample Outputs ===")
+            for i in range(min(3, len(decoded_preds))):
+                print(f"\nSample {i+1}:")
+                print(f"Prediction: {decoded_preds[i][:100]}...")
+                print(f"Label: {decoded_labels[i][:100]}...")
+            
+            # 특수 토큰 제거 및 공백 정리
+            decoded_preds = [pred.strip() for pred in decoded_preds]
+            decoded_labels = [label.strip() for label in decoded_labels]
+            
+            for token in self.remove_tokens:
+                decoded_preds = [pred.replace(token, "") for pred in decoded_preds]
+                decoded_labels = [label.replace(token, "") for label in decoded_labels]
+            
+            # 빈 문자열 처리
+            decoded_preds = [pred if pred.strip() else "empty" for pred in decoded_preds]
+            decoded_labels = [label if label.strip() else "empty" for label in decoded_labels]
+            
+            print("\n=== ROUGE Input Check ===")
+            print(f"Number of predictions: {len(decoded_preds)}")
+            print(f"Number of labels: {len(decoded_labels)}")
+            print("\nFirst prediction after cleaning:", decoded_preds[0][:100])
+            print("First label after cleaning:", decoded_labels[0][:100])
+            
+            # ROUGE 계산
             scores = self.rouge.get_scores(decoded_preds, decoded_labels, avg=True)
+            print("\n=== ROUGE Scores ===")
+            print(scores)
+            
             result = {
                 'rouge1_f1': scores['rouge-1']['f'],
                 'rouge2_f1': scores['rouge-2']['f'],
                 'rougeL_f1': scores['rouge-l']['f']
             }
             
-            # 문제 샘플 정보를 wandb에 로깅
-            if wandb.run is not None and self.problem_samples:
-                wandb.log({
-                    "problem_samples": wandb.Table(
-                        columns=["type", "index", "prediction", "label"],
-                        data=self.problem_samples
-                    )
-                })
-                
+            print("\nFinal metrics:", result)
+            return result
+            
         except Exception as e:
-            print(f"\nError calculating ROUGE: {str(e)}")
-            self.log_problem_samples("rouge_error", predictions, labels, range(len(decoded_preds)))
-            result = {
+            print(f"\n=== Error in Metric Calculation ===")
+            print(f"Error type: {type(e)}")
+            print(f"Error message: {str(e)}")
+            import traceback
+            print("\nTraceback:")
+            print(traceback.format_exc())
+            
+            return {
                 'rouge1_f1': 0.0,
                 'rouge2_f1': 0.0,
                 'rougeL_f1': 0.0
             }
-        
-        return result
-        
-    def log_problem_samples(self, problem_type, predictions, labels, indices):
-        """문제가 있는 샘플들을 기록"""
-        for idx in indices:
-            try:
-                pred_text = self.processing_class.decode(predictions[idx], skip_special_tokens=True)
-                label_text = self.processing_class.decode(labels[idx], skip_special_tokens=True)
-                self.problem_samples.append([
-                    problem_type,
-                    int(idx),
-                    pred_text,
-                    label_text
-                ])
-            except Exception as e:
-                print(f"Error logging problem sample: {str(e)}")
 
 class CustomTrainer(Seq2SeqTrainer):
     def __init__(self, *args, remove_tokens=None, **kwargs):
