@@ -20,8 +20,9 @@ generation:
   repetition_penalty: 1.5
   no_repeat_ngram_size: 15
   early_stopping: true
-  bos_token_id: null
-  eos_token_id: null
+  bos_token_id: 0
+  eos_token_id: 1
+  decoder_start_token_id: 0
 
 model:
   trust_remote_code: true

@@ -41,9 +41,9 @@ class CustomTrainer(Seq2SeqTrainer):
     def __init__(self, *args, remove_tokens=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.remove_tokens = remove_tokens or []
-        
+        self.wandb_callback = WandBCallback()
+        self.add_callback(self.wandb_callback)
+    
     def compute_metrics(self, pred):
-        """
-        compute_metrics 래퍼 함수
-        """
-        return self.args.compute_metrics(pred) 
+        """compute_metrics 래퍼 함수"""
+        return self.args.compute_metrics(pred)  # 직접 로깅 제거 
