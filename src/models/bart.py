@@ -33,10 +33,9 @@ class BartSummarizer(nn.Module):
             cache_dir=self.full_config.general.model_cache_dir
         )
         
-        # 2. 모델 초기화 - 불필요한 분류 관련 파라미터 제거
+        # 2. 모델 초기화 - seq2seq 설정
         model_kwargs = {
             "cache_dir": self.full_config.general.model_cache_dir,
-            "problem_type": "seq2seq_lm",  # 명시적으로 seq2seq 태스크임을 지정
         }
         
         # torch_dtype 설정이 있는 경우 추가
@@ -49,26 +48,24 @@ class BartSummarizer(nn.Module):
             **model_kwargs
         ).to(self.device)
         
-        # 3. 특수 토큰 설정
-        self.model.config.decoder_start_token_id = self.tokenizer.bos_token_id
-        self.model.config.forced_bos_token_id = self.tokenizer.bos_token_id
-        self.model.config.forced_eos_token_id = self.tokenizer.eos_token_id
+        # 3. 모델 설정 업데이트
+        self.model.config.update({
+            "decoder_start_token_id": self.tokenizer.bos_token_id,
+            "forced_bos_token_id": self.tokenizer.bos_token_id,
+            "forced_eos_token_id": self.tokenizer.eos_token_id,
+            "pad_token_id": self.tokenizer.pad_token_id,
+            "bos_token_id": self.tokenizer.bos_token_id,
+            "eos_token_id": self.tokenizer.eos_token_id,
+            "is_encoder_decoder": True,
+            "task": "summarization",
+            "problem_type": "seq2seq_lm",
+            # 분류 관련 설정 제거 - None 대신 기본값 사용
+            "num_labels": 2,  # 기본값으로 설정
+            "id2label": {0: "LABEL_0", 1: "LABEL_1"},
+            "label2id": {"LABEL_0": 0, "LABEL_1": 1}
+        })
         
-        # 4. 분류 관련 속성 제거
-        if hasattr(self.model.config, "num_labels"):
-            delattr(self.model.config, "num_labels")
-        if hasattr(self.model.config, "id2label"):
-            delattr(self.model.config, "id2label")
-        if hasattr(self.model.config, "label2id"):
-            delattr(self.model.config, "label2id")
-        
-        # 디버깅을 위한 설정 출력
-        print("\nSpecial token settings:")
-        print(f"decoder_start_token_id: {self.model.config.decoder_start_token_id}")
-        print(f"bos_token_id: {self.model.config.bos_token_id}")
-        print(f"eos_token_id: {self.model.config.eos_token_id}")
-        
-        # Add special tokens (if configured)
+        # 4. 특수 토큰 추가 (설정된 경우)
         if hasattr(self.config, 'tokenizer') and hasattr(self.config.tokenizer, 'special_tokens'):
             special_tokens_dict = {
                 'additional_special_tokens': [

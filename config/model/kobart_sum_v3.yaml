@@ -15,6 +15,7 @@ tokenizer:
   decoder_start_token_id: 0
 
 generation:
+  max_length: 128
   max_new_tokens: 128
   min_new_tokens: 32
   temperature: 0.7

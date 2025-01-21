@@ -61,7 +61,7 @@ class TrainerMetrics:
     def __call__(self, eval_preds):
         predictions, labels = eval_preds
         
-        print("\n=== TrainerMetrics Debug ===")
+        print("\n=== Metric Calculation Debug ===")
         print(f"Input shapes - Predictions: {predictions.shape}, Labels: {labels.shape}")
         
         # 음수값 처리
@@ -70,19 +70,24 @@ class TrainerMetrics:
         predictions = predictions.clip(min=0)
         labels = np.where(labels != -100, labels, self.processing_class.pad_token_id)
         
-        print(f"Token ranges - Predictions: [{predictions.min()}, {predictions.max()}], Labels: [{labels.min()}, {labels.max()}]")
+        print(f"\nToken ranges:")
+        print(f"Predictions: [{predictions.min()}, {predictions.max()}]")
+        print(f"Labels: [{labels.min()}, {labels.max()}]")
         
         try:
             # 디코딩
             decoded_preds = self.processing_class.batch_decode(predictions, skip_special_tokens=True)
             decoded_labels = self.processing_class.batch_decode(labels, skip_special_tokens=True)
             
-            # 샘플 출력
+            # 샘플 출력 (처음 3개)
             print("\n=== Sample Outputs ===")
             for i in range(min(3, len(decoded_preds))):
-                print(f"\nSample {i+1}:")
-                print(f"Prediction: {decoded_preds[i][:100]}...")
-                print(f"Label: {decoded_labels[i][:100]}...")
+                print(f"\n[Sample {i+1}]")
+                print(f"Prediction tokens: {predictions[i][:50]}...")
+                print(f"Label tokens: {labels[i][:50]}...")
+                print(f"Decoded prediction: {decoded_preds[i][:200]}")
+                print(f"Decoded label: {decoded_labels[i][:200]}")
+                print("-" * 80)
             
             # 특수 토큰 제거 및 공백 정리
             decoded_preds = [pred.strip() for pred in decoded_preds]
@@ -92,20 +97,28 @@ class TrainerMetrics:
                 decoded_preds = [pred.replace(token, "") for pred in decoded_preds]
                 decoded_labels = [label.replace(token, "") for label in decoded_labels]
             
-            # 빈 문자열 처리
+            # 빈 문자열 처리 및 통계
+            empty_preds = sum(1 for p in decoded_preds if not p.strip())
+            empty_labels = sum(1 for l in decoded_labels if not l.strip())
+            
+            print(f"\n=== Empty String Statistics ===")
+            print(f"Empty predictions: {empty_preds}/{len(decoded_preds)}")
+            print(f"Empty labels: {empty_labels}/{len(decoded_labels)}")
+            
+            # 빈 문자열 대체
             decoded_preds = [pred if pred.strip() else "empty" for pred in decoded_preds]
             decoded_labels = [label if label.strip() else "empty" for label in decoded_labels]
             
-            print("\n=== ROUGE Input Check ===")
-            print(f"Number of predictions: {len(decoded_preds)}")
-            print(f"Number of labels: {len(decoded_labels)}")
-            print("\nFirst prediction after cleaning:", decoded_preds[0][:100])
-            print("First label after cleaning:", decoded_labels[0][:100])
+            # 길이 통계
+            pred_lengths = [len(p.split()) for p in decoded_preds]
+            label_lengths = [len(l.split()) for l in decoded_labels]
+            
+            print(f"\n=== Length Statistics ===")
+            print(f"Prediction lengths (min/max/avg): {min(pred_lengths)}/{max(pred_lengths)}/{np.mean(pred_lengths):.1f}")
+            print(f"Label lengths (min/max/avg): {min(label_lengths)}/{max(label_lengths)}/{np.mean(label_lengths):.1f}")
             
             # ROUGE 계산
             scores = self.rouge.get_scores(decoded_preds, decoded_labels, avg=True)
-            print("\n=== ROUGE Scores ===")
-            print(scores)
             
             result = {
                 'rouge1_f1': scores['rouge-1']['f'],
@@ -113,7 +126,9 @@ class TrainerMetrics:
                 'rougeL_f1': scores['rouge-l']['f']
             }
             
-            print("\nFinal metrics:", result)
+            print("\n=== Final ROUGE Scores ===")
+            print(result)
+            
             return result
             
         except Exception as e:
