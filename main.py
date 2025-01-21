@@ -145,7 +145,7 @@ def main(cfg: DictConfig):
             print("프롬프트 모드로 실행 중...")
             processor = DataProcessor(None, cfg)
             print("데이터 로드 중...")
-            train_df, val_df, test_df = processor.load_data()
+            train_df, val_df, test_df = load_dataset(cfg.general.data_path)
             print(f"데이터 로드 완료 (train: {len(train_df)}, val: {len(val_df)}, test: {len(test_df)})")
             
             # few-shot 샘플 준비
@@ -209,10 +209,17 @@ def main(cfg: DictConfig):
             )
             
         else:  # finetune 모드
+            # DataProcessor 초기화 시 기본값 설정 추가
+            tokenizer_config = OmegaConf.create({
+                "encoder_max_len": 512,  # 기본값 설정
+                "decoder_max_len": 128,  # 기본값 설정
+                **cfg.model.tokenizer  # 기존 설정 유지
+            })
+            
             processor = DataProcessor(
                 tokenizer=model.tokenizer,
-                config=cfg.model.tokenizer,  # tokenizer 설정
-                data_path=cfg.general.data_path  # data_path 추가
+                config=tokenizer_config,  # 수정된 설정 사용
+                data_path=cfg.general.data_path
             )
             train_dataset = processor.prepare_dataset("train")
             val_dataset = processor.prepare_dataset("dev")

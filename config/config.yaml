@@ -133,3 +133,19 @@ train:
     logging_dir: "${general.output_path}/logs"
     logging_steps: 100
     remove_unused_columns: false
+
+model:
+  tokenizer:
+    encoder_max_len: 512
+    decoder_max_len: 128
+  generation:
+    max_new_tokens: 128
+    min_new_tokens: 10
+    num_beams: 5
+    temperature: 0.7
+    top_p: 0.9
+    do_sample: true
+    length_penalty: 1.0
+    repetition_penalty: 1.2
+    no_repeat_ngram_size: 3
+    early_stopping: true

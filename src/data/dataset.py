@@ -129,10 +129,10 @@ class DataProcessor:
             encoder_input['attention_mask'] = encoder_input['attention_mask'].squeeze(0)
         
         if is_train:
-            # 2. 레이블 데이터 준비
+            # 2. 레이블 데이터 준비 - 동일한 max_length 사용
             decoder_input = self.tokenizer(
                 df['summary'].tolist(),
-                max_length=self.config.decoder_max_len,
+                max_length=self.config.encoder_max_len,  # encoder와 동일한 max_length 사용
                 padding='max_length',
                 truncation=True,
                 return_tensors='pt'
@@ -142,20 +142,11 @@ class DataProcessor:
             labels = decoder_input['input_ids'].clone()
             labels[labels == self.tokenizer.pad_token_id] = -100
             
-            # 디버깅 출력
+            # 디버깅 출력 추가
             print("\n=== Dataset Debug Info ===")
             print(f"Input shape: {encoder_input['input_ids'].shape}")
-            print(f"Attention mask shape: {encoder_input['attention_mask'].shape}")
             print(f"Labels shape: {labels.shape}")
-            
-            # 샘플 출력
-            print("\n=== Sample Data ===")
-            for i in range(min(2, len(df))):
-                print(f"\n[Sample {i+1}]")
-                print(f"Dialogue: {df['dialogue'].iloc[i][:100]}...")
-                print(f"Summary: {df['summary'].iloc[i][:100]}...")
-                print(f"Input IDs: {encoder_input['input_ids'][i][:50]}...")
-                print(f"Labels: {labels[i][:50]}...")
+            print(f"Attention mask shape: {encoder_input['attention_mask'].shape}")
             
             return DialogueDataset(
                 encoder_input=encoder_input,
