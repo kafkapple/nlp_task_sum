@@ -336,7 +336,7 @@ def main(cfg: DictConfig):
                 
                 # accelerator 관련 설정
                 ddp_find_unused_parameters=False,
-                use_cpu=False if torch.cuda.is_available() else True
+                no_cuda=not torch.cuda.is_available()
             )
             
             # 메트릭 계산기 초기화
