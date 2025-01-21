@@ -7,16 +7,30 @@ tokenizer:
   padding: "max_length"
   truncation: true
   return_tensors: "pt"
+  padding_side: "right"
+  truncation_side: "right"
   encoder_max_len: 1024
   decoder_max_len: 128
+  bos_token_id: 0
+  decoder_start_token_id: 0
 
 generation:
+  max_length: 128
+  max_new_tokens: 128
+  min_new_tokens: 32
+  temperature: 0.7
+  top_p: 0.9
+  do_sample: true
   num_beams: 4
-  max_length: 256
-  min_length: 32
   length_penalty: 1.0
+  repetition_penalty: 1.2
+  no_repeat_ngram_size: 3
   early_stopping: true
+  bos_token_id: 0
+  decoder_start_token_id: 0
+  eos_token_id: 1
 
+# 학습 설정
 train:
   training:
     num_train_epochs: 3
@@ -40,4 +54,8 @@ train:
     logging_first_step: true
     
     predict_with_generate: true
-    remove_unused_columns: true 
+    remove_unused_columns: true
+
+model:
+  trust_remote_code: true
+  device_map: "auto" 

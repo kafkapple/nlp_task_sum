@@ -6,6 +6,7 @@ from omegaconf import DictConfig
 import os
 from dotenv import load_dotenv
 from huggingface_hub import login
+import importlib
 
 class ModelFactory:
     """Factory class for creating and managing various LLM models"""
@@ -14,17 +15,17 @@ class ModelFactory:
         "solar": {
             "class": "SolarAPI",
             "module": "solar",
-            "types": ["prompt"]
+            "modes": ["prompt"]
         },
         "bart": {
             "class": "BartSummarizer",
             "module": "bart",
-            "types": ["finetune"]
+            "modes": ["finetune"]
         },
         "llama": {
             "class": "LlamaModel",
             "module": "llama",
-            "types": ["finetune", "prompt"]
+            "modes": ["finetune", "prompt"]
         }
     }
     
@@ -36,24 +37,25 @@ class ModelFactory:
     @classmethod
     def create_model(cls, config: DictConfig):
         """Create appropriate model instance based on config"""
-        # huggingface 토큰 설정
         os.environ['HUGGINGFACE_TOKEN'] = config.huggingface.token
         login(token=config.huggingface.token)
         
-        model_family = config.model.family
-        model_type = config.model.type
-
-        if model_family not in cls._model_families:
-            raise ValueError(f"Unsupported model family: {model_family}")
+        if config.model.family not in cls._model_families:
+            raise ValueError(f"Unknown model family: {config.model.family}")
             
-        model_info = cls._model_families[model_family]
-        if model_type not in model_info["types"]:
-            raise ValueError(f"Model {model_family} does not support type: {model_type}")
-
-        # 동적으로 모델 클래스 import
-        module = __import__(f"src.models.{model_info['module']}", 
-                          fromlist=[model_info['class']])
-        model_class = getattr(module, model_info['class'])
+        family = cls._model_families[config.model.family]
+        module = importlib.import_module(f"src.models.{family['module']}")
+        model_class = getattr(module, family['class'])
+        
+        # 프롬프트 템플릿 설정 병합
+        if hasattr(config, 'prompt_templates'):
+            from omegaconf import OmegaConf
+            # 기존 모델 설정을 딕셔너리로 변환
+            model_dict = OmegaConf.to_container(config.model)
+            # prompt_templates 추가
+            model_dict['prompt_templates'] = OmegaConf.to_container(config.prompt_templates)
+            # 새로운 구조체 생성
+            config.model = OmegaConf.create(model_dict)
         
         return model_class(config)
 

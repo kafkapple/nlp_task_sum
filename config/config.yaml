@@ -3,11 +3,65 @@ defaults:
   - model: bllossom
   - train: default
 
+prompt_templates:
+  "1":
+    system: |
+      You are a Korean dialogue summarizer. Follow these rules:
+      1. Summarize the dialogue in Korean only
+      2. Keep the summary concise and simple
+      3. Do not include any English text
+      4. Focus on the key points only
+    few_shot: |
+      다음 지시사항에 따라 대화를 요약하세요:
+      1. 한국어로만 요약하세요
+      2. 간단명료하게 작성하세요
+      3. 핵심 내용만 포함하세요
+
+      Sample Dialogue:
+      {sample_dialogue}
+
+      Sample Summary:
+      {sample_summary}
+
+      Dialogue:
+      {dialogue}
+
+      Summary:
+    zero_shot: |
+      Summarize the following dialogue:
+      Dialogue: {dialogue}
+      Summary:
+  "2":
+    system: |
+      You are a Korean dialogue summarizer. Provide a concise summary in Korean only.
+      Rules:
+      1. Only output the summary, nothing else
+      2. Do not include any instructions or markers
+      3. Keep it simple and focused
+    instruction: |
+      Please summarize the following dialogue in Korean.
+      Be concise and focus on the key points.
+    few_shot:
+      user: |
+        Dialogue:
+        {sample_dialogue}
+        Summary:
+      assistant: "{sample_summary}"
+      final_user: |
+        Dialogue:
+        {dialogue}
+        Summary:
+    zero_shot: |
+      Create a concise summary of this dialogue:
+      Dialogue: {dialogue}
+      Summary:
+
 general:
   seed: 42
   timestamp: ${now:%Y%m%d_%H%M%S}
-  data_path: "${hydra:runtime.cwd}/data"
-  output_path: "${hydra:runtime.cwd}/outputs/${general.timestamp}"
+  data_path: "data"
+  output_path: "outputs/${now:%Y%m%d_%H%M%S}"
+  model_cache_dir: "${hydra:runtime.cwd}/../models"
 
 wandb:
   project: "dialogue-summary"
@@ -15,9 +69,10 @@ wandb:
   name: ${general.timestamp}
 
 prompt:
-  n_samples: 2
+  mode: "few-shot"
+  version: "v2"
+  n_samples: 100
   save_predictions: true
-  version: 2
   system: "You are a expert in the field of dialogue summarization..."
   instruction: |
     Following the instructions below...
@@ -46,4 +101,51 @@ metrics:
 
 huggingface:
   token: ${oc.env:HUGGINGFACE_TOKEN}
-  cache_dir: "${hydra:runtime.cwd}/../models"  # 상위 디렉토리의 models
+  cache_dir: ${general.model_cache_dir}
+
+lora:
+  r: 8
+  alpha: 32
+  dropout: 0.1
+  target_modules: ["q_proj", "v_proj"]
+
+train:
+  training:
+    learning_rate: 2e-5
+    num_train_epochs: 2
+    per_device_train_batch_size: 4
+    per_device_eval_batch_size: 4
+    warmup_ratio: 0.1
+    weight_decay: 0.01
+    gradient_checkpointing: true
+    gradient_accumulation_steps: 4
+    fp16: true
+    bf16: false
+    evaluation_strategy: "epoch"
+    save_strategy: "epoch"
+    save_total_limit: 3
+    load_best_model_at_end: true
+    metric_for_best_model: "eval_rouge1_f1"
+    greater_is_better: true
+    predict_with_generate: true
+    generation_max_length: 128
+    generation_num_beams: 5
+    logging_dir: "${general.output_path}/logs"
+    logging_steps: 100
+    remove_unused_columns: false
+
+model:
+  tokenizer:
+    encoder_max_len: 512
+    decoder_max_len: 128
+  generation:
+    max_new_tokens: 128
+    min_new_tokens: 10
+    num_beams: 5
+    temperature: 0.7
+    top_p: 0.9
+    do_sample: true
+    length_penalty: 1.0
+    repetition_penalty: 1.2
+    no_repeat_ngram_size: 3
+    early_stopping: true

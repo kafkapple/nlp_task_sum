@@ -1,45 +1,16 @@
-name: "solar/solar-1.0"
-family: "llama"
-type: "prompt"
+name: "solar-api"  # wandb 로깅용
+family: "solar"
+mode: "prompt"
 
 # API 설정
 api:
-  base_url: "http://211.237.9.6:8080/v1"
-  api_key: "sk-solar-api-key"
-  temperature: 0.7
-  top_p: 0.9
+  base_url: "https://api.upstage.ai/v1/solar"
+  api_key: ${oc.env:UPSTAGE_API_KEY}
+  model: "solar-1-mini-chat"
 
-# 프롬프트 템플릿 설정
-prompt_templates:
-  v1:
-    system: "You are a expert in the field of dialogue summarization..."
-    few_shot: |
-      {instruction}
-      Sample Dialogue: {sample_dialogue}
-      Sample Summary: {sample_summary}
-      
-      Dialogue: {dialogue}
-      Summary:
-    zero_shot: |
-      Dialogue: {dialogue}
-      Summary:
-  v2:
-    system: "You are a expert in the field of dialogue summarization..."
-    instruction: |
-      Following the instructions below, summarize the given document.
-      Instructions:
-      1. Read the provided sample dialogue and corresponding summary.
-      2. Read the dialogue carefully.
-      3. Following the sample's style of summary...
-    few_shot:
-      user: |
-        {instruction}
-        Dialogue: {sample_dialogue}
-        Summary:
-      assistant: "{sample_summary}"
-      final_user: |
-        Dialogue: {dialogue}
-        Summary:
-    zero_shot: |
-      Dialogue: {dialogue}
-      Summary:
+# 생성 설정
+generation:
+  max_new_tokens: 64
+  temperature: 0.2
+  top_p: 0.95
+  stop_sequences: ["###", "대화", "Summary:", "Dialogue:"]

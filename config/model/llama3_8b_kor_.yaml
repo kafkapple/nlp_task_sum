@@ -1,0 +1,42 @@
+name: "beomi/Llama-3-Open-Ko-8B"
+family: "llama"
+mode: "prompt"
+
+# 토크나이저 설정
+tokenizer:
+  max_length: 2048
+  padding_side: "left"
+  truncation_side: "left"
+
+# 모델 설정
+model:
+  trust_remote_code: true
+  torch_dtype: "float16"
+  device_map: "auto"
+
+# 생성 설정
+generation:
+  max_length: 32
+  min_length: 10
+  temperature: 0.3
+  top_p: 0.7
+  repetition_penalty: 1.5
+  no_repeat_ngram_size: 3
+  early_stopping: true
+  do_sample: true
+  num_beams: 5
+  length_penalty: 1.0
+  stop_tokens: ["<s>", "</s>", "<pad>", "(Your response here)", "```"]
+
+# 양자화 설정
+quantization:
+  enabled: true
+  precision: "int4"
+  compute_dtype: "float16"
+
+# LoRA 설정
+lora:
+  r: 8
+  alpha: 32
+  dropout: 0.1
+  target_modules: ["q_proj", "v_proj"] 

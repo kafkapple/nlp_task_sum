@@ -1,6 +1,8 @@
 from rouge import Rouge
 from typing import Dict, List
 import wandb
+import numpy as np
+
 class Metrics:
     def __init__(self):
         self.rouge = Rouge()
@@ -24,42 +26,91 @@ class Metrics:
             avg_score_dict[key] = sum(score[key] for score in raw_scores) / len(raw_scores)
             
         return sum(scores) / len(scores), avg_score_dict 
-from rouge import Rouge
-import numpy as np
 
-def compute_metrics(tokenizer, pred, config):
-    labels_ids = pred.label_ids
-    pred_ids = pred.predictions
-    
-    # 디코딩
-    pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-    labels_ids[labels_ids == -100] = tokenizer.pad_token_id
-    label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
-    
-    # 특수 토큰 제거
-    for token in config.inference.remove_tokens:
-        pred_str = [pred.replace(token, '').strip() for pred in pred_str]
-        label_str = [label.replace(token, '').strip() for label in label_str]
-    
-    # 빈 문자열 처리
-    pred_str = [pred if pred else "empty" for pred in pred_str]
-    label_str = [label if label else "empty" for label in label_str]
-    
-    try:
-        rouge = Rouge()
-        scores = rouge.get_scores(pred_str, label_str, avg=True)
+class TrainerMetrics:
+    def __init__(self, tokenizer, remove_tokens):
+        self.tokenizer = tokenizer
+        self.remove_tokens = remove_tokens
+        self.rouge = Rouge()
         
-        return {
-            'rouge1_f1': scores['rouge-1']['f'],
-            'rouge2_f1': scores['rouge-2']['f'],
-            'rougeL_f1': scores['rouge-l']['f']
-        }
-    except ValueError as e:
-        print(f"ROUGE 계산 중 오류 발생: {str(e)}")
-        print(f"Sample predictions: {pred_str[:3]}")
-        print(f"Sample labels: {label_str[:3]}")
-        return {
-            'rouge1_f1': 0.0,
-            'rouge2_f1': 0.0,
-            'rougeL_f1': 0.0
-        } 
+    def __call__(self, pred):
+        try:
+            labels_ids = pred.label_ids
+            pred_ids = pred.predictions
+            
+            if isinstance(pred_ids, tuple):
+                pred_ids = pred_ids[0]
+            
+            print("\n=== Metric Calculation Debug ===")
+            print(f"Predictions shape: {pred_ids.shape}")
+            print(f"Labels shape: {labels_ids.shape}")
+            
+            # -100을 pad_token_id로 변환
+            labels_ids = labels_ids.copy()  # 원본 데이터 보존
+            labels_ids[labels_ids == -100] = self.tokenizer.pad_token_id
+            
+            # 음수 값 처리
+            pred_ids = np.clip(pred_ids, a_min=0, a_max=None)
+            
+            # 디코딩
+            pred_str = self.tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+            label_str = self.tokenizer.batch_decode(
+                labels_ids, 
+                skip_special_tokens=True
+            )
+            
+            # 샘플 출력
+            print("\n=== Sample Predictions ===")
+            for i in range(min(3, len(pred_str))):
+                print(f"\nSample {i+1}:")
+                print(f"Prediction: {pred_str[i]}")
+                print(f"Gold Summary: {label_str[i]}")
+            
+            # 특수 토큰 제거
+            for token in self.remove_tokens:
+                pred_str = [p.replace(token, '').strip() for p in pred_str]
+                label_str = [l.replace(token, '').strip() for l in label_str]
+            
+            # ROUGE 점수 계산
+            all_scores = []
+            for p, l in zip(pred_str, label_str):
+                if not p.strip():
+                    print(f"\nEmpty prediction found: '{p}'")
+                    p = "empty"
+                if not l.strip():
+                    print(f"\nEmpty label found: '{l}'")
+                    l = "empty"
+                    
+                try:
+                    score = self.rouge.get_scores(p, l)[0]
+                    all_scores.append(score)
+                except Exception as e:
+                    print(f"\nError calculating ROUGE for:")
+                    print(f"Prediction: '{p}'")
+                    print(f"Label: '{l}'")
+                    print(f"Error: {str(e)}")
+                    all_scores.append({'rouge-1': {'f': 0.0}, 'rouge-2': {'f': 0.0}, 'rouge-l': {'f': 0.0}})
+            
+            # 평균 계산
+            avg_scores = {
+                'eval_rouge1_f1': np.mean([s['rouge-1']['f'] for s in all_scores]),
+                'eval_rouge2_f1': np.mean([s['rouge-2']['f'] for s in all_scores]),
+                'eval_rougeL_f1': np.mean([s['rouge-l']['f'] for s in all_scores])
+            }
+            
+            print("\n=== Final Scores ===")
+            print(avg_scores)
+            
+            return avg_scores
+            
+        except Exception as e:
+            print(f"\n=== Error in Metric Calculation ===")
+            print(f"Error type: {type(e).__name__}")
+            print(f"Error message: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return {
+                'eval_rouge1_f1': 0.0,
+                'eval_rouge2_f1': 0.0,
+                'eval_rougeL_f1': 0.0
+            } 
