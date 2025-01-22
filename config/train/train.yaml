@@ -9,9 +9,9 @@ training:
   optim: "paged_adamw_8bit"
   
   # 배치 및 메모리 최적화
-  per_device_train_batch_size: 4
-  per_device_eval_batch_size: 4
-  gradient_accumulation_steps: 8 
+  per_device_train_batch_size: 16
+  per_device_eval_batch_size: 16
+  gradient_accumulation_steps: 2 
   gradient_checkpointing: true
   
   # 하드웨어 최적화

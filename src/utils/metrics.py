@@ -38,7 +38,7 @@ class TrainerMetrics:
         self.tokenizer = tokenizer
         self.remove_tokens = remove_tokens or []
         self.rouge = Rouge()
-        self.output_dir = Path(self.config.general.output_dir)
+        self.output_dir = Path(self.config.general.output_path)
         self.step = 0
         
     def __call__(self, eval_preds):
