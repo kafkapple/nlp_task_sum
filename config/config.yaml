@@ -149,3 +149,12 @@ model:
     repetition_penalty: 1.2
     no_repeat_ngram_size: 3
     early_stopping: true
+
+custom_config:
+  temperature: 0.2
+  top_p: 0.3
+  few_shot: true
+  n_few_shot_samples: 1  # 사용할 few shot 예제 개수
+  few_shot_selection: "min_max_len_summary" # "max_len_summary"  # random 또는 max_len_summary
+  random_seed: 2001
+  n_val_samples: 100
