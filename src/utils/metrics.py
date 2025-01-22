@@ -101,9 +101,9 @@ class TrainerMetrics:
             
             # 평균 계산
             avg_scores = {
-                'eval_rouge1_f1': np.mean([s['rouge-1']['f'] for s in all_scores]),
-                'eval_rouge2_f1': np.mean([s['rouge-2']['f'] for s in all_scores]),
-                'eval_rougeL_f1': np.mean([s['rouge-l']['f'] for s in all_scores])
+                'eval/rouge1_f1': np.mean([s['rouge-1']['f'] for s in all_scores]),
+                'eval/rouge2_f1': np.mean([s['rouge-2']['f'] for s in all_scores]),
+                'eval/rougeL_f1': np.mean([s['rouge-l']['f'] for s in all_scores])
             }
             
             print("\n=== Final Scores ===")

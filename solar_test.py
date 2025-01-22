@@ -19,19 +19,15 @@ def log_rouge(scores, wandb_logger):
         "rouge-1": "eval/rouge1_f1",
         "rouge-2": "eval/rouge2_f1",
         "rouge-l": "eval/rougeL_f1",
-      
     }
-
     for key, value in scores.items():
         wandb_logger.experiment.log({dict_rouge[key]: value})
         print(f"{dict_rouge[key]}: {value}")
 
-
 def init_logger(cfg: DictConfig):
-
     return WandbLogger(
-        project=cfg.wandb.project,
-        entity=cfg.wandb.entity,
+        project=cfg.general.wandb.project,
+        entity=cfg.general.wandb.entity,
         name= f"{cfg.model.name}_{cfg.model.mode}_{cfg.general.timestamp}",
         config=OmegaConf.to_container(cfg, resolve=True),
         group=cfg.model.family,
@@ -48,145 +44,88 @@ def compute_metrics(pred, gold):
     return result
 
 #Dialogue를 입력으로 받아, Solar Chat API에 보낼 Prompt를 생성하는 함수를 정의합니다.
-def build_prompt_v0(config,dialogue, sample_dialogue1, sample_summary1):
-    if config["custom_config"]["few_shot"]:
-        system_prompt = "You are a expert in the field of dialogue summarization, summarize the given dialogue in a concise manner. Follow the user's instruction carefully and provide a summary that is relevant to the dialogue."
-
-        few_shot_user_prompt_1 = (
-            "Following the instructions below, summarize the given document.\n"
-            "Instructions:\n"
-            "1. Read the provided sample dialogue and corresponding summary.\n"
-            "2. Read the dialogue carefully.\n"
-            "3. Following the sample's style of summary, provide a concise summary of the given dialogue. Be sure that the summary is simple but captures the essence of the dialogue.\n\n"
-            "Dialogue:\n"
-            f"{sample_dialogue1}\n\n"
-            "Summary:\n"
-        )
-        few_shot_assistant_prompt_1 = sample_summary1
-        
-        user_prompt = (
-            "Dialogue:\n"
-            f"{dialogue}\n\n"
-            "Summary:\n"
-        )
-        messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": few_shot_user_prompt_1},
-        {"role": "assistant", "content": few_shot_assistant_prompt_1},
-        {"role": "user", "content": user_prompt},
-        ]
-
-
-    else:
-        system_prompt = "You are an expert in the field of dialogue summarization. Please summarize the following dialogue."
-        user_prompt = f"Dialogue:\n{dialogue}\n\nSummary:\n"
-        messages = [
-        {
-            "role": "system",
-            "content": system_prompt
-        },
-        {
-            "role": "user",
-            "content": user_prompt
-        }
-        ]
-    return messages
 def build_prompt(config, dialogue, sample_dialogues, sample_summaries):
-    """
-    sample_dialogues: list of sample dialogues
-    sample_summaries: list of corresponding summaries
-    """
     if config["custom_config"]["few_shot"]:
         system_prompt = (
-            "You are an expert in dialogue summarization. Follow these instructions for all summaries:\n"
-            "1. Read the dialogue carefully\n"
-            "2. Provide a concise summary that captures the essence of the dialogue\n"
-            "3. Follow the style of the example summaries provided\n"
-            "Below are some example summaries followed by a new dialogue to summarize."
+            "You are a Korean dialogue summarization expert. Follow these guidelines:\n"
+            "1. Create a concise and coherent summary in Korean\n"
+            "2. Capture the key points and main context of the dialogue\n"
+            "3. Maintain a natural flow in the summary\n"
+            "4. Keep the tone consistent with the original dialogue\n"
+            "5. Focus on the most important information\n"
+            "6. Ensure the summary is self-contained and understandable"
+        )
+
+        # 여러 few-shot 예제를 하나의 문자열로 결합
+        few_shot_examples = ""
+        if isinstance(sample_dialogues, list) and isinstance(sample_summaries, list):
+            for d, s in zip(sample_dialogues, sample_summaries):
+                few_shot_examples += f"대화:\n{d}\n요약:\n{s}\n\n"
+        else:
+            few_shot_examples = f"대화:\n{sample_dialogues}\n요약:\n{sample_summaries}\n\n"
+
+        user_prompt = (
+            "다음은 대화 요약의 예시입니다. 이를 참고하여 새로운 대화를 요약해주세요.\n\n"
+            f"{few_shot_examples}\n"
+            "이제 아래 대화를 위 예시들과 비슷한 스타일로 요약해주세요.\n"
+            f"대화:\n{dialogue}\n\n"
+            "요약:"
         )
         
-        messages = [{"role": "system", "content": system_prompt}]
-        
-        # Add few shot examples in a single user message
-        few_shot_examples = ""
-        for dialogue_sample, summary_sample in zip(sample_dialogues, sample_summaries):
-            few_shot_examples += f"Dialogue:\n{dialogue_sample}\nSummary:\n{summary_sample}\n\n"
-        
-        messages.append({"role": "user", "content": few_shot_examples.strip()})
-        
-        # Add target dialogue
-        messages.append({
-            "role": "user", 
-            "content": f"Now summarize this dialogue:\n{dialogue}"
-        })
-
-    else:
-        system_prompt = "You are an expert in the field of dialogue summarization. Please summarize the following dialogue."
-        user_prompt = f"Dialogue:\n{dialogue}\n\nSummary:\n"
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ]
-    print("\n=== Prompt Structure ===")
-    for msg in messages:
-        print(f"\n[{msg['role'].upper()}]")
-        print(f"{msg['content'][:200]}...")  # 내용이 긴 경우 앞부분만 표시
-    print("\n=====================")
+    else:
+        system_prompt = (
+            "You are a Korean dialogue summarization expert.\n"
+            "Create a concise and coherent summary that captures the key points of the dialogue.\n"
+            "The summary should be in Korean and maintain the original context."
+        )
+        user_prompt = f"대화:\n{dialogue}\n\n요약:"
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
     
     return messages
-def summarization(config, dialogue,client, sample_dialogue1, sample_summary1):
-    messages = build_prompt(config, dialogue,sample_dialogue1,sample_summary1)
+def summarization(config, dialogue, client, sample_dialogues, sample_summaries):
+    messages = build_prompt(config, dialogue, sample_dialogues, sample_summaries)
     max_retries = 3
-    retry_delay = 60  # 1분 대기
-    # summary = client.chat.completions.create(
-    #     model="solar-1-mini-chat",
-    #     messages=messages,
-    #     temperature=config["custom_config"]["temperature"],
-    #     top_p=config["custom_config"]["top_p"]
-    # )
-    # return summary.choices[0].message.content
+    retry_delay = 1
+    
     for attempt in range(max_retries):
         try:
             summary = client.chat.completions.create(
                 model="solar-1-mini-chat",
                 messages=messages,
                 temperature=config["custom_config"]["temperature"],
-                top_p=config["custom_config"]["top_p"]
+                top_p=config["custom_config"]["top_p"],
             )
             return summary.choices[0].message.content
-        except openai.RateLimitError:
-            if attempt < max_retries - 1:  # 마지막 시도가 아니면
-                print(f"\nRate limit reached. Waiting {retry_delay} seconds...")
-                time.sleep(retry_delay)
-                retry_delay *= 2  # 대기 시간을 2배로 증가
-            else:
-                raise  # 최대 시도 횟수를 초과하면 예외를 발생시킴
+            
+        except Exception as e:
+            if attempt == max_retries - 1:
+                print(f"Failed after {max_retries} attempts: {str(e)}")
+                raise
+            print(f"Attempt {attempt + 1} failed: {str(e)}")
+            time.sleep(retry_delay)
+            retry_delay *= 2  # exponential backoff
 
 # Validation data의 대화를 요약하고, 점수를 측정합니다.
-def validate(config, val_df,client, sample_dialogues, sample_summaries, num_samples=-1):
+def validate(config, val_df, client, sample_dialogues, sample_summaries, num_samples=-1):
     val_samples = val_df[:num_samples] if num_samples > 0 else val_df
     print("======= val_samples.shape: ", val_samples.shape)
     
     scores = []
     raw_scores = []
+    predictions = []
     # Rate limiting을 위한 변수들
     requests_per_minute = 50  # 분당 최대 요청 수
     start_time = time.time()
     request_count = 0
+    
     for idx, row in tqdm(val_samples.iterrows(), total=len(val_samples)):
-
-    #     dialogue = row['dialogue']
-    #     summary = summarization(config, dialogue, client, sample_dialogue1, sample_summary1)
-    #     results = compute_metrics(summary, row['summary'])
-    #     avg_score = sum(results.values()) / len(results)
-        
-    #     scores.append(avg_score)
-    #     raw_scores.append(results)
-    # val_avg_score = sum(scores) / len(scores)
-
-    # print(f"Validation Average Score: {val_avg_score}")
-    # return raw_scores
-     # Rate limiting 체크
         request_count += 1
         if request_count >= requests_per_minute:
             elapsed = time.time() - start_time
@@ -205,9 +144,39 @@ def validate(config, val_df,client, sample_dialogues, sample_summaries, num_samp
             
             scores.append(avg_score)
             raw_scores.append(results)
+            
+            # 예측 결과 저장
+            predictions.append({
+                'dialogue': dialogue,
+                'prediction': summary,
+                'gold_summary': row['summary'],
+                'rouge1_f1': results['rouge-1'],
+                'rouge2_f1': results['rouge-2'],
+                'rougeL_f1': results['rouge-l'],
+                'avg_score': avg_score
+            })
+            
         except Exception as e:
             print(f"\nError processing sample {idx}: {str(e)}")
             continue
+    
+    # 예측 결과를 DataFrame으로 변환하여 CSV로 저장
+    predictions_df = pd.DataFrame(predictions)
+    os.makedirs(config.general.output_path, exist_ok=True)
+    val_output_path = os.path.join(config.general.output_path, "validation_samples.csv")
+    predictions_df.to_csv(val_output_path, index=False)
+    
+    # wandb에 예측 결과 로깅
+    for idx, row in predictions_df.iterrows():
+        wandb.log({
+            "val/dialogue": row['dialogue'],
+            "val/prediction": row['prediction'],
+            "val/gold_summary": row['gold_summary'],
+            "val/rouge1_f1": row['rouge1_f1'],
+            "val/rouge2_f1": row['rouge2_f1'],
+            "val/rougeL_f1": row['rougeL_f1'],
+            "val/avg_score": row['avg_score']
+        })
     
     val_avg_score = sum(scores) / len(scores)
     print(f"\nValidation Average Score: {val_avg_score}")
@@ -271,7 +240,12 @@ def calc_train_score(config, train_df,client, sample_dialogue1, sample_summary1,
 
 # Train data 중 처음 3개의 대화를 요약합니다.
 def test_on_train_data(config, train_df,client, sample_dialogue1, sample_summary1,num_samples=3):
-    for idx, row in train_df[:num_samples].iterrows():
+
+    train_df_sample = train_df[:num_samples]
+    train_df_rest = train_df[num_samples:]
+    print(f"train_df describe: {train_df_rest.describe()}")
+    print(f"train_df_sample describe: {train_df_sample.describe()}")
+    for idx, row in train_df_sample.iterrows():
         dialogue = row['dialogue']
         summary = summarization(config, dialogue, client, sample_dialogue1, sample_summary1)
         print(f"Dialogue:\n{dialogue}\n")
@@ -280,14 +254,21 @@ def test_on_train_data(config, train_df,client, sample_dialogue1, sample_summary
         print("=="*50)
 
 def eda(df):
-    df['dialogue_len'] = df.dialogue.str.len()
+    try:
+        df['dialogue_len'] = df.dialogue.str.len()
+    except:
+        print("data has no dialogue column")
     try:
         df['summary_len'] = df.summary.str.len()
     except:
-        print("Test data has no summary column")
-    agg_df = df.agg(['mean','std','min','max'])
-    print(agg_df)
-    print(df.describe())
+        print(" data has no summary column")
+    try:
+        # agg_df = df.agg(['mean','std','min','max'])
+        # print(agg_df)
+        print(df.describe())
+    except:
+        print("data has no fname column")
+    
 
 @hydra.main(version_base="1.3", config_path="config", config_name="config")
 def main(cfg: DictConfig):
@@ -317,17 +298,17 @@ def main(cfg: DictConfig):
         few_shot_sample_min = train_df.nsmallest(cfg.custom_config.n_few_shot_samples, "summary_len")
         few_shot_sample_max = train_df.nlargest(cfg.custom_config.n_few_shot_samples, "summary_len")
         few_shot_samples = pd.concat([few_shot_sample_min, few_shot_sample_max])
-    elif cfg.custom_config.few_shot_selection == "random":
-        few_shot_samples = train_df.sample(cfg.custom_config.n_few_shot_samples, random_state=random_seed)
     elif cfg.custom_config.few_shot_selection == "baseline":
         few_shot_samples = train_df.sample(cfg.custom_config.n_few_shot_samples, random_state=random_seed)
-        # sample_dialogue = few_shot_samples['dialogue'].iloc[0]['dialogue']
-        # sample_summary = few_shot_samples['summary'].iloc[0]['summary']
     else:
         raise ValueError(f"Invalid few_shot_selection value: {cfg.custom_config.few_shot_selection}")
 
-    sample_dialogue = few_shot_samples['dialogue'].tolist() #.iloc[0]['dialogue']
-    sample_summary = few_shot_samples['summary'].tolist() #.iloc[0]['summary']
+    if cfg.custom_config.few_shot_selection == "baseline":
+        sample_dialogue = few_shot_samples.iloc[0]['dialogue']
+        sample_summary = few_shot_samples.iloc[0]['summary']
+    else:
+        sample_dialogue = few_shot_samples['dialogue'].tolist() #.iloc[0]['dialogue']
+        sample_summary = few_shot_samples['summary'].tolist() #.iloc[0]['summary']
 
     print(f"Sample Dialogue1:\n{sample_dialogue}\n")
     print(f"Sample Summary1: {sample_summary}\n")
