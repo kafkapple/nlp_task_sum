@@ -122,7 +122,7 @@ model:
 custom_config:
   temperature: 0.3
   top_p: 0.8
-  few_shot: false
+  few_shot: true
   n_few_shot_samples: 1
   few_shot_selection: "max_len_summary"
   n_val_samples: 100

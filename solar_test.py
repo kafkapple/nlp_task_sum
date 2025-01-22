@@ -164,6 +164,8 @@ def validate(config, val_df, client, sample_dialogues, sample_summaries, num_sam
     predictions_df = pd.DataFrame(predictions)
     os.makedirs(config.general.output_path, exist_ok=True)
     val_output_path = os.path.join(config.general.output_path, "validation_samples.csv")
+    table = wandb.Table(dataframe=predictions_df)
+    wandb.log({"val_samples": table})
     predictions_df.to_csv(val_output_path, index=False)
     
     # wandb에 예측 결과 로깅

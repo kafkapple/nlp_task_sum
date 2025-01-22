@@ -118,7 +118,7 @@ class TrainerMetrics:
             import traceback
             traceback.print_exc()
             return {
-                'eval_rouge1_f1': 0.0,
-                'eval_rouge2_f1': 0.0,
-                'eval_rougeL_f1': 0.0
+                'eval/rouge1_f1': 0.0,
+                'eval/rouge2_f1': 0.0,
+                'eval/rougeL_f1': 0.0
             } 
