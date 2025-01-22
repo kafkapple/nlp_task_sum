@@ -1,7 +1,7 @@
 # 기본 학습 설정
 training:
   # 기본 학습 설정
-  num_train_epochs: 10
+  num_train_epochs: 1
   learning_rate: 2e-4
   warmup_ratio: 0.1
   weight_decay: 0.01
@@ -11,7 +11,7 @@ training:
   # 배치 및 메모리 최적화
   per_device_train_batch_size: 4
   per_device_eval_batch_size: 4
-  gradient_accumulation_steps: 4
+  gradient_accumulation_steps: 8 
   gradient_checkpointing: true
   
   # 하드웨어 최적화
@@ -23,7 +23,7 @@ training:
   save_strategy: "epoch"
   save_total_limit: 2
   load_best_model_at_end: true
-  metric_for_best_model: "eval_rouge1_f1"
+  metric_for_best_model: "eval/rouge1_f1"
   greater_is_better: true
   
   # 로깅
