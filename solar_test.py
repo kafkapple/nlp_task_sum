@@ -97,34 +97,28 @@ def build_prompt(config, dialogue, sample_dialogues, sample_summaries):
     sample_summaries: list of corresponding summaries
     """
     if config["custom_config"]["few_shot"]:
-        system_prompt = "You are a expert in the field of dialogue summarization, summarize the given dialogue in a concise manner. Follow the user's instruction carefully and provide a summary that is relevant to the dialogue."
-
+        system_prompt = (
+            "You are an expert in dialogue summarization. Follow these instructions for all summaries:\n"
+            "1. Read the dialogue carefully\n"
+            "2. Provide a concise summary that captures the essence of the dialogue\n"
+            "3. Follow the style of the example summaries provided\n"
+            "Below are some example summaries followed by a new dialogue to summarize."
+        )
+        
         messages = [{"role": "system", "content": system_prompt}]
         
-        # Add few shot examples
+        # Add few shot examples in a single user message
+        few_shot_examples = ""
         for dialogue_sample, summary_sample in zip(sample_dialogues, sample_summaries):
-            few_shot_user_prompt = (
-                "Following the instructions below, summarize the given document.\n"
-                "Instructions:\n"
-                "1. Read the provided sample dialogue and corresponding summary.\n"
-                "2. Read the dialogue carefully.\n"
-                "3. Following the sample's style of summary, provide a concise summary of the given dialogue. Be sure that the summary is simple but captures the essence of the dialogue.\n\n"
-                "Dialogue:\n"
-                f"{dialogue_sample}\n\n"
-                "Summary:\n"
-            )
-            messages.extend([
-                {"role": "user", "content": few_shot_user_prompt},
-                {"role": "assistant", "content": summary_sample}
-            ])
+            few_shot_examples += f"Dialogue:\n{dialogue_sample}\nSummary:\n{summary_sample}\n\n"
+        
+        messages.append({"role": "user", "content": few_shot_examples.strip()})
         
         # Add target dialogue
-        user_prompt = (
-            "Dialogue:\n"
-            f"{dialogue}\n\n"
-            "Summary:\n"
-        )
-        messages.append({"role": "user", "content": user_prompt})
+        messages.append({
+            "role": "user", 
+            "content": f"Now summarize this dialogue:\n{dialogue}"
+        })
 
     else:
         system_prompt = "You are an expert in the field of dialogue summarization. Please summarize the following dialogue."
@@ -133,6 +127,12 @@ def build_prompt(config, dialogue, sample_dialogues, sample_summaries):
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ]
+    print("\n=== Prompt Structure ===")
+    for msg in messages:
+        print(f"\n[{msg['role'].upper()}]")
+        print(f"{msg['content'][:200]}...")  # 내용이 긴 경우 앞부분만 표시
+    print("\n=====================")
+    
     return messages
 def summarization(config, dialogue,client, sample_dialogue1, sample_summary1):
     messages = build_prompt(config, dialogue,sample_dialogue1,sample_summary1)
@@ -317,8 +317,14 @@ def main(cfg: DictConfig):
         few_shot_sample_min = train_df.nsmallest(cfg.custom_config.n_few_shot_samples, "summary_len")
         few_shot_sample_max = train_df.nlargest(cfg.custom_config.n_few_shot_samples, "summary_len")
         few_shot_samples = pd.concat([few_shot_sample_min, few_shot_sample_max])
-    else:
+    elif cfg.custom_config.few_shot_selection == "random":
         few_shot_samples = train_df.sample(cfg.custom_config.n_few_shot_samples, random_state=random_seed)
+    elif cfg.custom_config.few_shot_selection == "baseline":
+        few_shot_samples = train_df.sample(cfg.custom_config.n_few_shot_samples, random_state=random_seed)
+        # sample_dialogue = few_shot_samples['dialogue'].iloc[0]['dialogue']
+        # sample_summary = few_shot_samples['summary'].iloc[0]['summary']
+    else:
+        raise ValueError(f"Invalid few_shot_selection value: {cfg.custom_config.few_shot_selection}")
 
     sample_dialogue = few_shot_samples['dialogue'].tolist() #.iloc[0]['dialogue']
     sample_summary = few_shot_samples['summary'].tolist() #.iloc[0]['summary']
