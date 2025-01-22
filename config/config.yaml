@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - model: kobart
+  - model: solar
   - train: default
 
 prompt_templates:

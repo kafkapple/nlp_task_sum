@@ -17,10 +17,7 @@ from omegaconf import OmegaConf
 
 # Beta transforms 경고 끄기
 torchvision.disable_beta_transforms_warning()
-
-# 다른 경고들도 필요한 경우 끄기
 warnings.filterwarnings("ignore", category=UserWarning)
-# 또는 특정 메시지만
 warnings.filterwarnings("ignore", message=".*beta.*")
 
 from src.data.dataset import DataProcessor, download_and_extract, load_dataset
@@ -47,7 +44,7 @@ def init_wandb(cfg: DictConfig):
         if wandb.run is not None:
             wandb.finish()
             
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        timestamp = cfg.general.timestamp
         run_name = f"{cfg.model.name}_{cfg.model.mode}_{timestamp}"
         
         # output_path 생성

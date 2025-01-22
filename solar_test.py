@@ -47,50 +47,50 @@ def compute_metrics(pred, gold):
     result = {key: value["f"] for key, value in results.items()}
     return result
 
-# Dialogue를 입력으로 받아, Solar Chat API에 보낼 Prompt를 생성하는 함수를 정의합니다.
-# def build_prompt(config,dialogue, sample_dialogue1, sample_summary1):
-#     if config["custom_config"]["few_shot"]:
-#         system_prompt = "You are a expert in the field of dialogue summarization, summarize the given dialogue in a concise manner. Follow the user's instruction carefully and provide a summary that is relevant to the dialogue."
+#Dialogue를 입력으로 받아, Solar Chat API에 보낼 Prompt를 생성하는 함수를 정의합니다.
+def build_prompt_v0(config,dialogue, sample_dialogue1, sample_summary1):
+    if config["custom_config"]["few_shot"]:
+        system_prompt = "You are a expert in the field of dialogue summarization, summarize the given dialogue in a concise manner. Follow the user's instruction carefully and provide a summary that is relevant to the dialogue."
 
-#         few_shot_user_prompt_1 = (
-#             "Following the instructions below, summarize the given document.\n"
-#             "Instructions:\n"
-#             "1. Read the provided sample dialogue and corresponding summary.\n"
-#             "2. Read the dialogue carefully.\n"
-#             "3. Following the sample's style of summary, provide a concise summary of the given dialogue. Be sure that the summary is simple but captures the essence of the dialogue.\n\n"
-#             "Dialogue:\n"
-#             f"{sample_dialogue1}\n\n"
-#             "Summary:\n"
-#         )
-#         few_shot_assistant_prompt_1 = sample_summary1
+        few_shot_user_prompt_1 = (
+            "Following the instructions below, summarize the given document.\n"
+            "Instructions:\n"
+            "1. Read the provided sample dialogue and corresponding summary.\n"
+            "2. Read the dialogue carefully.\n"
+            "3. Following the sample's style of summary, provide a concise summary of the given dialogue. Be sure that the summary is simple but captures the essence of the dialogue.\n\n"
+            "Dialogue:\n"
+            f"{sample_dialogue1}\n\n"
+            "Summary:\n"
+        )
+        few_shot_assistant_prompt_1 = sample_summary1
         
-#         user_prompt = (
-#             "Dialogue:\n"
-#             f"{dialogue}\n\n"
-#             "Summary:\n"
-#         )
-#         messages = [
-#         {"role": "system", "content": system_prompt},
-#         {"role": "user", "content": few_shot_user_prompt_1},
-#         {"role": "assistant", "content": few_shot_assistant_prompt_1},
-#         {"role": "user", "content": user_prompt},
-#         ]
+        user_prompt = (
+            "Dialogue:\n"
+            f"{dialogue}\n\n"
+            "Summary:\n"
+        )
+        messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": few_shot_user_prompt_1},
+        {"role": "assistant", "content": few_shot_assistant_prompt_1},
+        {"role": "user", "content": user_prompt},
+        ]
 
 
-#     else:
-#         system_prompt = "You are an expert in the field of dialogue summarization. Please summarize the following dialogue."
-#         user_prompt = f"Dialogue:\n{dialogue}\n\nSummary:\n"
-#         messages = [
-#         {
-#             "role": "system",
-#             "content": system_prompt
-#         },
-#         {
-#             "role": "user",
-#             "content": user_prompt
-#         }
-#         ]
-#     return messages
+    else:
+        system_prompt = "You are an expert in the field of dialogue summarization. Please summarize the following dialogue."
+        user_prompt = f"Dialogue:\n{dialogue}\n\nSummary:\n"
+        messages = [
+        {
+            "role": "system",
+            "content": system_prompt
+        },
+        {
+            "role": "user",
+            "content": user_prompt
+        }
+        ]
+    return messages
 def build_prompt(config, dialogue, sample_dialogues, sample_summaries):
     """
     sample_dialogues: list of sample dialogues
