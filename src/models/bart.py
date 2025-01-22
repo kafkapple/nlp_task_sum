@@ -164,19 +164,28 @@ class BartSummarizer(nn.Module):
         """특정 레이어만 학습하도록 설정"""
         # 모든 파라미터 freeze
         for param in self.model.parameters():
-            param.requires_grad = False
+            if param.dtype in [torch.float16, torch.float32, torch.float64]:
+                param.requires_grad = False
         
         # Encoder의 마지막 N층 unfreeze
-        encoder_layers = self.model.model.encoder.layers
+        encoder_layers = self.model.base_model.encoder.layers
         for i in range(-num_layers_to_train, 0):
             for param in encoder_layers[i].parameters():
-                param.requires_grad = True
+                if param.dtype in [torch.float16, torch.float32, torch.float64]:
+                    param.requires_grad = True
         
         # Decoder의 마지막 N층 unfreeze
-        decoder_layers = self.model.model.decoder.layers
+        decoder_layers = self.model.base_model.decoder.layers
         for i in range(-num_layers_to_train, 0):
             for param in decoder_layers[i].parameters():
-                param.requires_grad = True
+                if param.dtype in [torch.float16, torch.float32, torch.float64]:
+                    param.requires_grad = True
             # Cross-attention도 학습
             for param in decoder_layers[i].encoder_attn.parameters():
+                if param.dtype in [torch.float16, torch.float32, torch.float64]:
+                    param.requires_grad = True
+                    
+        # LM Head는 항상 학습되도록 설정
+        for param in self.model.lm_head.parameters():
+            if param.dtype in [torch.float16, torch.float32, torch.float64]:
                 param.requires_grad = True 

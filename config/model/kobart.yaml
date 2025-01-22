@@ -3,14 +3,13 @@ mode: "finetune"
 family: "bart"
 
 # 모델 특화 설정만 포함
-model:
-  partial_training: true
-  num_layers_to_train: 2
-  lora: true
-  quantization:
-    enabled: true
-    precision: "int8"
-    compute_dtype: "float16"
+partial_training: true
+num_layers_to_train: 2
+lora: false
+quantization:
+  enabled: false
+  precision: "int8"
+  compute_dtype: "float16"
 
 tokenizer:
   max_length: 1024

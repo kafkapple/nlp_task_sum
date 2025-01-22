@@ -134,19 +134,38 @@ class T5Summarizer(nn.Module):
         """특정 레이어만 학습하도록 설정"""
         # 모든 파라미터 freeze
         for param in self.model.parameters():
-            param.requires_grad = False
+            if param.dtype in [torch.float16, torch.float32, torch.float64]:
+                param.requires_grad = False
         
         # Encoder의 마지막 N층 unfreeze
         encoder_layers = self.model.encoder.block
         for i in range(-num_layers_to_train, 0):
             for param in encoder_layers[i].parameters():
-                param.requires_grad = True
+                if param.dtype in [torch.float16, torch.float32, torch.float64]:
+                    param.requires_grad = True
         
         # Decoder의 마지막 N층 unfreeze
         decoder_layers = self.model.decoder.block
         for i in range(-num_layers_to_train, 0):
             for param in decoder_layers[i].parameters():
-                param.requires_grad = True
+                if param.dtype in [torch.float16, torch.float32, torch.float64]:
+                    param.requires_grad = True
             # Cross-attention도 학습
             for param in decoder_layers[i].layer[1].parameters():  # T5의 cross-attention은 layer[1]에 있음
-                param.requires_grad = True 
+                if param.dtype in [torch.float16, torch.float32, torch.float64]:
+                    param.requires_grad = True
+                    
+        # Shared embedding layer는 항상 학습되도록 설정
+        for param in self.model.shared.parameters():
+            if param.dtype in [torch.float16, torch.float32, torch.float64]:
+                param.requires_grad = True
+                
+        # Final layer norm layers도 학습되도록 설정
+        if hasattr(self.model.encoder, 'final_layer_norm'):
+            for param in self.model.encoder.final_layer_norm.parameters():
+                if param.dtype in [torch.float16, torch.float32, torch.float64]:
+                    param.requires_grad = True
+        if hasattr(self.model.decoder, 'final_layer_norm'):
+            for param in self.model.decoder.final_layer_norm.parameters():
+                if param.dtype in [torch.float16, torch.float32, torch.float64]:
+                    param.requires_grad = True 
