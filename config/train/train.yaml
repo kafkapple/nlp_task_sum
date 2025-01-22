@@ -1,7 +1,7 @@
 # 기본 학습 설정
 training:
   # 기본 학습 설정
-  num_train_epochs: 1
+  num_train_epochs: 10
   learning_rate: 2e-4
   warmup_ratio: 0.1
   weight_decay: 0.01
@@ -11,7 +11,7 @@ training:
   # 배치 및 메모리 최적화
   per_device_train_batch_size: 16
   per_device_eval_batch_size: 16
-  gradient_accumulation_steps: 2 
+  gradient_accumulation_steps: 4
   gradient_checkpointing: true
   
   # 하드웨어 최적화

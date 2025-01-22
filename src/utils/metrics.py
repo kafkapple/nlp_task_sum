@@ -7,7 +7,8 @@ from omegaconf import DictConfig
 from pathlib import Path
 
 class Metrics:
-    def __init__(self):
+    def __init__(self, config: DictConfig):
+        self.config = config
         self.rouge = Rouge()
         
     def compute_metrics(self, pred: str, gold: str) -> Dict[str, float]:
@@ -38,7 +39,7 @@ class TrainerMetrics:
         self.tokenizer = tokenizer
         self.remove_tokens = remove_tokens or []
         self.rouge = Rouge()
-        self.output_dir = Path(self.config.general.output_path)
+        self.output_dir = Path(config.general.output_dir) if hasattr(config.general, 'output_dir') else Path('outputs')
         self.step = 0
         
     def __call__(self, eval_preds):
@@ -94,13 +95,15 @@ class TrainerMetrics:
                 'rougeL_f1': df['rouge-l'].mean()
             }
             
-            # 결과 저장
+            # 결과 저장 경로 확실히 생성
             eval_step = f"step_{self.step}"
             save_dir = self.output_dir / "eval_results" / eval_step
             save_dir.mkdir(parents=True, exist_ok=True)
             
-            # CSV 파일로 저장
-            df.to_csv(save_dir / "predictions_and_metrics.csv", index=False)
+            # CSV 파일로 저장 시 경로 확인 로그 추가
+            save_path = save_dir / "predictions_and_metrics.csv"
+            print(f"\nSaving predictions to: {save_path}")
+            df.to_csv(save_path, index=False)
             
             # 통계 정보 저장
             stats = {
@@ -110,24 +113,24 @@ class TrainerMetrics:
                 'rouge_scores': result
             }
             
-            # wandb 로깅
+            # wandb 로깅 수정
             if wandb.run is not None:
                 # 테이블 생성
                 columns = ["id", "prediction", "gold_summary", "rouge-1", "rouge-2", "rouge-l"]
                 data = [[d[col] for col in columns] for d in samples_data]
                 table = wandb.Table(columns=columns, data=data)
                 
-                # 로깅
                 wandb.log({
                     f"eval/predictions_table_{eval_step}": table,
-                    "eval/rouge1_f1": result['rouge1_f1'],
+                    "eval/rouge1_f1": result['rouge1_f1'],  # eval/ 접두사로 수정
                     "eval/rouge2_f1": result['rouge2_f1'],
                     "eval/rougeL_f1": result['rougeL_f1'],
-                    "eval/num_samples": stats['num_samples'],
-                    "eval/avg_prediction_length": stats['avg_prediction_length'],
-                    "eval/avg_gold_length": stats['avg_gold_length']
+                    "eval/stats/num_samples": stats['num_samples'],
+                    "eval/stats/avg_prediction_length": stats['avg_prediction_length'],
+                    "eval/stats/avg_gold_length": stats['avg_gold_length']
                 })
             
+            # eval_ 접두사 없이 반환
             return result
             
         except Exception as e:

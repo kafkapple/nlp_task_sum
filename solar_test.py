@@ -28,7 +28,7 @@ def init_logger(cfg: DictConfig):
     return WandbLogger(
         project=cfg.general.wandb.project,
         entity=cfg.general.wandb.entity,
-        name= f"{cfg.model.name}_{cfg.model.mode}_{cfg.general.timestamp}",
+        name= f"{cfg.general.timestamp}",
         config=OmegaConf.to_container(cfg, resolve=True),
         group=cfg.model.family,
         dir=cfg.general.output_path,

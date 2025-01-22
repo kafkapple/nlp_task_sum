@@ -178,7 +178,7 @@ def main(cfg: DictConfig):
                 save_strategy=train_config['save_strategy'],
                 save_total_limit=train_config['save_total_limit'],
                 load_best_model_at_end=train_config['load_best_model_at_end'],
-                metric_for_best_model=train_config['metric_for_best_model'],
+                metric_for_best_model="rouge1_f1",  # eval_ 접두사 제거
                 greater_is_better=train_config['greater_is_better'],
                 
                 # 생성 설정
