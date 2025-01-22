@@ -26,6 +26,11 @@ class ModelFactory:
             "class": "LlamaModel",
             "module": "llama",
             "modes": ["finetune", "prompt"]
+        },
+        "t5": {
+            "class": "T5Summarizer",
+            "module": "t5",
+            "modes": ["finetune"]
         }
     }
     

@@ -29,84 +29,69 @@ class StopWordsCriteria(StoppingCriteria):
         # 정확한 매칭만 체크 (endswith 제거)
         return any(word == new_text.strip() for word in self.stop_words)
 
-class LlamaModel(BaseModel):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config.model  # 모델 관련 설정
-        self.full_config = config   # 전체 설정 (prompt_templates 등 접근용)
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self._init_model()
+class LlamaModel:
+    def __init__(self, cfg):
+        self.cfg = cfg
         
-        # finetune 모드일 때 LoRA 설정
-        if self.config.mode == "finetune":
-            peft_config = LoraConfig(
-                task_type=TaskType.CAUSAL_LM,
-                inference_mode=False,
-                r=self.config.lora.r,  # config.model의 lora 설정 사용
-                lora_alpha=self.config.lora.alpha,
-                lora_dropout=self.config.lora.dropout,
-                target_modules=self.config.lora.target_modules
-            )
-            self.model = get_peft_model(self.model, peft_config)
-            self.model.print_trainable_parameters()
-    
-    def _init_model(self):
-        """모델 초기화 with 메모리 최적화"""
-        # 메모리 최적화 설정
-        torch.cuda.empty_cache()
-        
-        # cache_dir 설정
-        cache_dir = Path(self.full_config.general.model_cache_dir)
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        
-        # 토크나이저 초기화
+        # 모델과 토크나이저 초기화
         self.tokenizer = AutoTokenizer.from_pretrained(
-            self.config.name,
-            trust_remote_code=True,
-            cache_dir=cache_dir
+            cfg.model.name,
+            cache_dir=cfg.huggingface.cache_dir,
+            token=cfg.huggingface.token
         )
-        self.tokenizer.pad_token = self.tokenizer.eos_token
         
-        # 모델 로드 시 메모리 효율적인 설정
-        model_kwargs = {
-            "torch_dtype": torch.float16,
-            "device_map": "auto",
-            "quantization_config": BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_use_double_quant=True,
-                bnb_4bit_quant_type="nf4"
-            ),
-            "cache_dir": cache_dir
-        }
+        # 모델 초기화 - model 속성으로 저장
+        self.model = AutoModelForCausalLM.from_pretrained(
+            cfg.model.name,
+            cache_dir=cfg.huggingface.cache_dir,
+            token=cfg.huggingface.token,
+            device_map="auto"
+        )
         
-        # LoRA 설정
-        if self.config.mode == "finetune":
-            peft_config = LoraConfig(
-                task_type=TaskType.CAUSAL_LM,
-                inference_mode=False,
-                r=self.config.lora.r,
-                lora_alpha=self.config.lora.alpha,
-                lora_dropout=self.config.lora.dropout,
-                target_modules=self.config.lora.target_modules,
-                bias="none",
-                modules_to_save=None
+        # 프롬프트 템플릿 설정
+        self.prompt_templates = cfg.prompt_templates
+        
+    def batch_summarize(self, dialogues, sample_dialogue=None, sample_summary=None, prompt_version="1"):
+        """배치 단위로 요약 생성"""
+        summaries = []
+        template = self.prompt_templates[prompt_version]
+        
+        for dialogue in dialogues:
+            if sample_dialogue and sample_summary:  # few-shot
+                prompt = template["few_shot"].format(
+                    sample_dialogue=sample_dialogue,
+                    sample_summary=sample_summary,
+                    dialogue=dialogue
+                )
+            else:  # zero-shot
+                prompt = template["zero_shot"].format(dialogue=dialogue)
+            
+            inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
+            
+            outputs = self.model.generate(
+                **inputs,
+                max_new_tokens=self.cfg.model.generation.max_new_tokens,
+                min_new_tokens=self.cfg.model.generation.min_new_tokens,
+                num_beams=self.cfg.model.generation.num_beams,
+                temperature=self.cfg.model.generation.temperature,
+                top_p=self.cfg.model.generation.top_p,
+                do_sample=self.cfg.model.generation.do_sample,
+                length_penalty=self.cfg.model.generation.length_penalty,
+                repetition_penalty=self.cfg.model.generation.repetition_penalty,
+                no_repeat_ngram_size=self.cfg.model.generation.no_repeat_ngram_size,
+                early_stopping=self.cfg.model.generation.early_stopping
             )
             
-            # 모델 초기화
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.config.name,
-                **model_kwargs
-            )
-            self.model = prepare_model_for_kbit_training(self.model)  # 4bit 학습 준비
-            self.model = get_peft_model(self.model, peft_config)
-            self.model.print_trainable_parameters()
-    
+            summary = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+            summaries.append(summary)
+            
+        return summaries
+
     def forward(self, **inputs):
         return self.model(**inputs)
         
     def generate(self, prompt: str) -> str:
-        generation_config = OmegaConf.to_container(self.config.generation)
+        generation_config = OmegaConf.to_container(self.cfg.model.generation)
         
         # stop_sequences나 stop_tokens가 있으면 추가
         if 'stop_sequences' in generation_config:
@@ -114,7 +99,7 @@ class LlamaModel(BaseModel):
         elif 'stop_tokens' in generation_config:
             generation_config['stop'] = generation_config.pop('stop_tokens')
         
-        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
+        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
         
         outputs = self.model.generate(
             **inputs,
@@ -142,10 +127,10 @@ class LlamaModel(BaseModel):
     def _build_prompt(self, dialogue: str, sample_dialogue: Optional[str] = None, 
                      sample_summary: Optional[str] = None, prompt_version: str = "v1") -> str:
         """프롬프트 생성"""
-        if self.config.mode == "prompt":
+        if self.cfg.model.mode == "prompt":
             # prompt_version에서 'v' 접두사 제거하고 문자열로 유지 (v1 -> "1", v2 -> "2")
             version = str(prompt_version.replace('v', ''))
-            templates = self.full_config.prompt_templates[version]
+            templates = self.prompt_templates[version]
             
             if sample_dialogue and sample_summary:
                 # few-shot 프롬프트
@@ -161,40 +146,6 @@ class LlamaModel(BaseModel):
         else:  # finetune 모드
             return dialogue
         
-    def batch_summarize(self, dialogues: List[str], sample_dialogue: str = None, 
-                       sample_summary: str = None, **kwargs) -> List[str]:
-        summaries = []
-        generation_config = OmegaConf.to_container(self.config.generation)
-        
-        for dialogue in dialogues:
-            prompt = self._build_prompt(dialogue, sample_dialogue, sample_summary)
-            inputs = self.tokenizer(prompt, return_tensors="pt", padding=True)
-            inputs = {k: v.to(self.device) for k, v in inputs.items()}
-            
-            # 디버깅 로그 추가
-            print("\n생성 설정:")
-            print(f"- 설정값: {generation_config}")
-            print(f"- 프롬프트 길이: {len(inputs['input_ids'][0])}")
-            
-            with torch.no_grad():
-                outputs = self.model.generate(
-                    **inputs,
-                    **generation_config,
-                    stopping_criteria=None  # 일단 stopping_criteria 제거
-                )
-                
-            # 디버깅 로그 추가
-            print(f"- 생성된 토큰 수: {len(outputs[0])}")
-            
-            summary = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-            print(f"- 생성된 전체 텍스트: {summary}")
-            
-            summary = self._clean_generated_text(summary, prompt)
-            print(f"- 정제된 요약문: {summary}")
-            summaries.append(summary)
-            
-        return summaries 
-        
     def prepare_inputs_for_generation(self, dialogue: str, summary: str = None):
         """학습/추론을 위한 입력 준비"""
         if summary:
@@ -207,7 +158,7 @@ class LlamaModel(BaseModel):
         inputs = self.tokenizer(
             prompt,
             truncation=True,
-            max_length=self.config.tokenizer.max_length,
+            max_length=self.cfg.model.tokenizer.max_length,
             padding="max_length",
             return_tensors="pt"
         )

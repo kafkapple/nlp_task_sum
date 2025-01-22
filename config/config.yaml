@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - model: llama3_8b_kor_sum
+  - model: solar
   - train: default
 
 prompt_templates:

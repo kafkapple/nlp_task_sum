@@ -1,56 +1,30 @@
-from transformers import Seq2SeqTrainer, TrainerCallback, GenerationConfig, PreTrainedTokenizerBase
-from typing import Dict, Any
+from transformers import Trainer, TrainerCallback, GenerationConfig, PreTrainedTokenizerBase
+from typing import Dict, List, Optional, Union
 import wandb
 import torch
 import numpy as np
 from rouge import Rouge  # 원본 baseline 방식으로 변경
+from pathlib import Path
+import os
 
 class WandBCallback(TrainerCallback):
-    """WandB 로깅을 위한 커스텀 콜백"""
-    def __init__(self):
-        self.training_config = None
-        
-    def on_train_begin(self, args, state, control, **kwargs):
-        """학습 시작 시 설정을 안전하게 변환해서 로깅"""
-        if self.training_config is None:
-            # GPU 정보 수집
-            gpu_info = {
-                "gpu_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU",
-                "gpu_count": torch.cuda.device_count() if torch.cuda.is_available() else 0,
-                "cuda_version": torch.version.cuda if torch.cuda.is_available() else "N/A"
-            }
-            
-            # 기본 타입만 포함하도록 설정 필터링
-            self.training_config = {
-                k: v for k, v in vars(args).items() 
-                if isinstance(v, (int, float, str, bool, type(None)))
-            }
-            
-            # 설정 업데이트
-            wandb.config.update({
-                "training": self.training_config,
-                "hardware": gpu_info
-            }, allow_val_change=True)
+    """WandB 로깅을 위한 콜백"""
     
-    def on_log(self, args, state, control, logs: Dict[str, Any] = None, **kwargs):
-        if not logs:
-            return
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        """로그 이벤트 처리"""
+        if state.is_world_process_zero and logs:
+            wandb.log(logs)
             
-        clean_logs = {}
-        for k, v in logs.items():
-            if isinstance(v, (int, float)):
-                # eval_ 접두사를 eval/로 변환하여 wandb에 로깅
-                if k.startswith('eval_'):
-                    clean_logs[k.replace('eval_', 'eval/')] = v
-                else:
-                    clean_logs[f'train/{k}'] = v
-        
-        if state.epoch is not None:
-            clean_logs["epoch"] = round(state.epoch, 2)
-        if state.global_step is not None:
-            clean_logs["step"] = state.global_step
+    def on_train_begin(self, args, state, control, **kwargs):
+        """학습 시작 시 처리"""
+        if state.is_world_process_zero:
+            wandb.define_metric("train/global_step")
+            wandb.define_metric("*", step_metric="train/global_step", step_sync=True)
             
-        wandb.log(clean_logs)
+    def on_train_end(self, args, state, control, **kwargs):
+        """학습 종료 시 처리"""
+        if state.is_world_process_zero:
+            wandb.finish()
 
 class TrainerMetrics:
     def __init__(self, tokenizer, remove_tokens=None):
@@ -145,46 +119,38 @@ class TrainerMetrics:
                 'rougeL_f1': 0.0
             }
 
-class CustomTrainer(Seq2SeqTrainer):
+class CustomTrainer(Trainer):
     def __init__(self, *args, remove_tokens=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.remove_tokens = remove_tokens or []
         
-        # tokenizer를 processing_class로 설정
-        if isinstance(self.tokenizer, PreTrainedTokenizerBase):
-            self.processing_class = self.tokenizer
+    def prediction_step(self, model, inputs, prediction_loss_only, ignore_keys=None):
+        """오버라이드된 prediction_step"""
+        has_labels = all(inputs.get(k) is not None for k in self.label_names)
+        inputs = self._prepare_inputs(inputs)
         
-        # 모델의 특수 토큰 ID 저장
-        self._save_model_special_tokens()
-        
-    def _save_model_special_tokens(self):
-        """모델의 특수 토큰 ID를 저장"""
-        self.special_tokens = {
-            "bos_token_id": self.processing_class.bos_token_id,
-            "eos_token_id": self.processing_class.eos_token_id,
-            "pad_token_id": self.processing_class.pad_token_id
+        # 생성 설정
+        gen_kwargs = {
+            "max_length": self.args.generation_max_length,
+            "num_beams": self.args.generation_num_beams,
+            "synced_gpus": True if os.getenv("ACCELERATE_TORCH_DISTRIBUTED_DEBUG") else False,
         }
         
-        # 모델 config에도 설정
-        self.model.config.decoder_start_token_id = self.special_tokens["bos_token_id"]
-        self.model.config.forced_bos_token_id = self.special_tokens["bos_token_id"]
-        self.model.config.forced_eos_token_id = self.special_tokens["eos_token_id"]
-        
-        # Generation config 설정
-        self.model.generation_config = GenerationConfig(
-            decoder_start_token_id=self.special_tokens["bos_token_id"],
-            bos_token_id=self.special_tokens["bos_token_id"],
-            eos_token_id=self.special_tokens["eos_token_id"],
-            forced_bos_token_id=self.special_tokens["bos_token_id"],
-            forced_eos_token_id=self.special_tokens["eos_token_id"],
-            pad_token_id=self.special_tokens["pad_token_id"]
+        generated_tokens = self.model.generate(
+            inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            **gen_kwargs,
         )
         
-    def prediction_step(self, *args, **kwargs):
-        """생성 시 특수 토큰 ID 유지"""
-        # 생성 설정 재확인
-        self._save_model_special_tokens()
-        return super().prediction_step(*args, **kwargs)
+        # labels가 있으면 loss 계산
+        if has_labels:
+            with torch.no_grad():
+                outputs = model(**inputs)
+            loss = outputs.loss.mean().detach()
+        else:
+            loss = None
+            
+        return (loss, generated_tokens, inputs["labels"])
 
     def compute_metrics(self, eval_preds):
         """메트릭 계산 및 로깅"""

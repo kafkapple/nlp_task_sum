@@ -16,7 +16,7 @@ model:
 
 # 생성 설정
 generation:
-  max_new_tokens: 64
+  max_new_tokens: 32
   min_length: 10
   temperature: 0.3
   top_p: 0.9
