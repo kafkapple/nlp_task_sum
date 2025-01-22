@@ -164,9 +164,23 @@ def validate(config, val_df, client, sample_dialogues, sample_summaries, num_sam
     predictions_df = pd.DataFrame(predictions)
     os.makedirs(config.general.output_path, exist_ok=True)
     val_output_path = os.path.join(config.general.output_path, "validation_samples.csv")
+
+    # 텍스트 길이를 제한 (예: 1000자로 잘라서 저장)
+    predictions_df["dialogue"] = predictions_df["dialogue"].apply(lambda x: x[:1000])
+
+    # wandb에 결과 로깅
     table = wandb.Table(dataframe=predictions_df)
     wandb.log({"val_samples": table})
     predictions_df.to_csv(val_output_path, index=False)
+    
+    # wandb artifact 생성 및 로깅
+    artifact = wandb.Artifact(
+        name="validation_results", 
+        type="dataset",
+        description="Validation predictions and scores"
+    )
+    artifact.add_file(val_output_path)
+    wandb.log_artifact(artifact)
     
     # wandb에 예측 결과 로깅
     for idx, row in predictions_df.iterrows():

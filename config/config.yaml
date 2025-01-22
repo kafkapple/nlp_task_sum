@@ -124,5 +124,5 @@ custom_config:
   top_p: 0.8
   few_shot: true
   n_few_shot_samples: 1
-  few_shot_selection: "max_len_summary"
+  few_shot_selection: "baseline"
   n_val_samples: 100
