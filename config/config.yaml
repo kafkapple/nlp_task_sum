@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - model: kobart
+  - model: t5
   - train: train
 
 prompt_templates:
