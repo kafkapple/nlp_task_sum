@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - model: solar
+  - model: kobart
   - train: default
 
 prompt_templates:
@@ -57,7 +57,7 @@ prompt_templates:
       Summary:
 
 general:
-  seed: 42
+  seed: 2001 #42
   timestamp: ${now:%Y%m%d_%H%M%S}
   data_path: "data"
   output_path: "outputs/${now:%Y%m%d_%H%M%S}"
@@ -155,6 +155,5 @@ custom_config:
   top_p: 0.3
   few_shot: true
   n_few_shot_samples: 1  # 사용할 few shot 예제 개수
-  few_shot_selection: "min_max_len_summary" # "max_len_summary"  # random 또는 max_len_summary
-  random_seed: 2001
+  few_shot_selection: "random" # "max_len_summary"  # random 또는 max_len_summary
   n_val_samples: 100

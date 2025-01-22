@@ -39,15 +39,10 @@ def init_logger(cfg: DictConfig):
     )
 load_dotenv()
 
-UPSTAGE_API_KEY = os.getenv("UPSTAGE_API_KEY")
-# 모델 성능에 대한 평가 지표를 정의합니다. 본 대회에서는 ROUGE 점수를 통해 모델의 성능을 평가합니다.
-rouge = Rouge()
-        # 데이터 경로를 지정해줍니다.
-DATA_PATH = "./data/"
-RESULT_PATH = "./outputs/"
-
 
 def compute_metrics(pred, gold):
+    # 모델 성능에 대한 평가 지표를 정의합니다. 본 대회에서는 ROUGE 점수를 통해 모델의 성능을 평가합니다.    
+    rouge = Rouge()
     results = rouge.get_scores(pred, gold, avg=True)
     result = {key: value["f"] for key, value in results.items()}
     return result
@@ -246,7 +241,7 @@ def inference(config, client,test_df,sample_dialogues,sample_summaries):
             "summary" : summary,
         }
     )
-    
+    RESULT_PATH = config.general.output_path
     if not os.path.exists(RESULT_PATH):
         os.makedirs(RESULT_PATH)
     output.to_csv(os.path.join(RESULT_PATH, "output_solar.csv"), index=False)
@@ -296,7 +291,10 @@ def eda(df):
 
 @hydra.main(version_base="1.3", config_path="config", config_name="config")
 def main(cfg: DictConfig):
-    random_seed = cfg.custom_config.random_seed
+    UPSTAGE_API_KEY = os.getenv("UPSTAGE_API_KEY")
+    DATA_PATH = cfg.general.data_path
+
+    random_seed = cfg.general.seed
     n_val_samples = cfg.custom_config.n_val_samples
     cfg.model.name = "solar-0"
 
