@@ -83,7 +83,7 @@ def main(cfg: DictConfig):
                 print(f"요약: {sample_summary}\n")
             
             # Initialize metrics
-            metrics = Metrics()
+            metrics = Metrics(config=cfg)
             
             print(f"\nTesting prompt version {cfg.prompt.version}")
             # 검증 데이터 요약 생성 (한 번만 실행)
@@ -201,6 +201,7 @@ def main(cfg: DictConfig):
             
             # 메트릭 계산기 초기화
             metrics = TrainerMetrics(
+                config=cfg,
                 tokenizer=model.tokenizer,
                 remove_tokens=cfg.inference.remove_tokens
             )

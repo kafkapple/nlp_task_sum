@@ -6,6 +6,7 @@ import numpy as np
 from rouge import Rouge  # 원본 baseline 방식으로 변경
 from pathlib import Path
 import os
+from src.utils.metrics import TrainerMetrics  # 메트릭 클래스 import
 
 class WandBCallback(TrainerCallback):
     """WandB 로깅을 위한 콜백"""
@@ -25,99 +26,6 @@ class WandBCallback(TrainerCallback):
         """학습 종료 시 처리"""
         if state.is_world_process_zero:
             wandb.finish()
-
-class TrainerMetrics:
-    def __init__(self, tokenizer, remove_tokens=None):
-        self.processing_class = tokenizer
-        self.remove_tokens = remove_tokens or []
-        self.rouge = Rouge()
-        
-    def __call__(self, eval_preds):
-        predictions, labels = eval_preds
-        
-        print("\n=== Metric Calculation Debug ===")
-        print(f"Input shapes - Predictions: {predictions.shape}, Labels: {labels.shape}")
-        
-        # 음수값 처리
-        if isinstance(predictions, tuple):
-            predictions = predictions[0]
-        predictions = predictions.clip(min=0)
-        labels = np.where(labels != -100, labels, self.processing_class.pad_token_id)
-        
-        print(f"\nToken ranges:")
-        print(f"Predictions: [{predictions.min()}, {predictions.max()}]")
-        print(f"Labels: [{labels.min()}, {labels.max()}]")
-        
-        try:
-            # 디코딩
-            decoded_preds = self.processing_class.batch_decode(predictions, skip_special_tokens=True)
-            decoded_labels = self.processing_class.batch_decode(labels, skip_special_tokens=True)
-            
-            # 샘플 출력 (처음 3개)
-            print("\n=== Sample Outputs ===")
-            for i in range(min(3, len(decoded_preds))):
-                print(f"\n[Sample {i+1}]")
-                print(f"Prediction tokens: {predictions[i][:50]}...")
-                print(f"Label tokens: {labels[i][:50]}...")
-                print(f"Decoded prediction: {decoded_preds[i][:200]}")
-                print(f"Decoded label: {decoded_labels[i][:200]}")
-                print("-" * 80)
-            
-            # 특수 토큰 제거 및 공백 정리
-            decoded_preds = [pred.strip() for pred in decoded_preds]
-            decoded_labels = [label.strip() for label in decoded_labels]
-            
-            for token in self.remove_tokens:
-                decoded_preds = [pred.replace(token, "") for pred in decoded_preds]
-                decoded_labels = [label.replace(token, "") for label in decoded_labels]
-            
-            # 빈 문자열 처리 및 통계
-            empty_preds = sum(1 for p in decoded_preds if not p.strip())
-            empty_labels = sum(1 for l in decoded_labels if not l.strip())
-            
-            print(f"\n=== Empty String Statistics ===")
-            print(f"Empty predictions: {empty_preds}/{len(decoded_preds)}")
-            print(f"Empty labels: {empty_labels}/{len(decoded_labels)}")
-            
-            # 빈 문자열 대체
-            decoded_preds = [pred if pred.strip() else "empty" for pred in decoded_preds]
-            decoded_labels = [label if label.strip() else "empty" for label in decoded_labels]
-            
-            # 길이 통계
-            pred_lengths = [len(p.split()) for p in decoded_preds]
-            label_lengths = [len(l.split()) for l in decoded_labels]
-            
-            print(f"\n=== Length Statistics ===")
-            print(f"Prediction lengths (min/max/avg): {min(pred_lengths)}/{max(pred_lengths)}/{np.mean(pred_lengths):.1f}")
-            print(f"Label lengths (min/max/avg): {min(label_lengths)}/{max(label_lengths)}/{np.mean(label_lengths):.1f}")
-            
-            # ROUGE 계산
-            scores = self.rouge.get_scores(decoded_preds, decoded_labels, avg=True)
-            
-            result = {
-                'rouge1_f1': scores['rouge-1']['f'],
-                'rouge2_f1': scores['rouge-2']['f'],
-                'rougeL_f1': scores['rouge-l']['f']
-            }
-            
-            print("\n=== Final ROUGE Scores ===")
-            print(result)
-            
-            return result
-            
-        except Exception as e:
-            print(f"\n=== Error in Metric Calculation ===")
-            print(f"Error type: {type(e)}")
-            print(f"Error message: {str(e)}")
-            import traceback
-            print("\nTraceback:")
-            print(traceback.format_exc())
-            
-            return {
-                'rouge1_f1': 0.0,
-                'rouge2_f1': 0.0,
-                'rougeL_f1': 0.0
-            }
 
 class CustomTrainer(Trainer):
     def __init__(self, *args, remove_tokens=None, **kwargs):

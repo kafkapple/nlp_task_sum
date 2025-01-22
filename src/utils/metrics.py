@@ -2,6 +2,9 @@ from rouge import Rouge
 from typing import Dict, List
 import wandb
 import numpy as np
+from transformers import PreTrainedTokenizerBase
+from omegaconf import DictConfig
+from pathlib import Path
 
 class Metrics:
     def __init__(self):
@@ -28,88 +31,104 @@ class Metrics:
         return sum(scores) / len(scores), avg_score_dict 
 
 class TrainerMetrics:
-    def __init__(self, tokenizer, remove_tokens):
+    """학습 및 평가를 위한 메트릭 계산 클래스"""
+    
+    def __init__(self, config: DictConfig, tokenizer: PreTrainedTokenizerBase, remove_tokens: List[str] = None):
+        self.config = config
         self.tokenizer = tokenizer
-        self.remove_tokens = remove_tokens
+        self.remove_tokens = remove_tokens or []
         self.rouge = Rouge()
+        self.output_dir = Path(self.config.general.output_dir)
+        self.step = 0
         
-    def __call__(self, pred):
+    def __call__(self, eval_preds):
+        predictions, labels = eval_preds
+        self.step += 1
+        
+        print("\n=== Metric Calculation Debug ===")
+        print(f"Input shapes - Predictions: {predictions.shape}, Labels: {labels.shape}")
+        
+        # 음수값 처리
+        if isinstance(predictions, tuple):
+            predictions = predictions[0]
+        predictions = predictions.clip(min=0)
+        labels = np.where(labels != -100, labels, self.tokenizer.pad_token_id)
+        
         try:
-            labels_ids = pred.label_ids
-            pred_ids = pred.predictions
-
-            # 예측값이 다양한 형태로 올 수 있으므로 적절히 처리
-            if isinstance(pred_ids, tuple):
-                pred_ids = pred_ids[0]
-            elif hasattr(pred_ids, 'predictions'):
-                pred_ids = pred_ids.predictions
+            # 디코딩 및 후처리
+            decoded_preds = self.tokenizer.batch_decode(predictions, skip_special_tokens=True)
+            decoded_labels = self.tokenizer.batch_decode(labels, skip_special_tokens=True)
             
-            # numpy 배열로 변환
-            pred_ids = np.array(pred_ids)
-            labels_ids = np.array(labels_ids)
-            
-            print("\n=== Metric Calculation Debug ===")
-            print(f"Predictions type: {type(pred_ids)}")
-            print(f"Predictions shape: {pred_ids.shape}")
-            print(f"Labels shape: {labels_ids.shape}")
-            
-            # -100을 pad_token_id로 변환
-            labels_ids = labels_ids.copy()
-            labels_ids[labels_ids == -100] = self.tokenizer.pad_token_id
-            
-            # 음수 값 처리
-            pred_ids = np.clip(pred_ids, a_min=0, a_max=None)
-            
-            # 디코딩
-            pred_str = self.tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-            label_str = self.tokenizer.batch_decode(
-                labels_ids, 
-                skip_special_tokens=True
-            )
-            
-            # 샘플 출력
-            print("\n=== Sample Predictions ===")
-            for i in range(min(3, len(pred_str))):
-                print(f"\nSample {i+1}:")
-                print(f"Prediction: {pred_str[i]}")
-                print(f"Gold Summary: {label_str[i]}")
-            
-            # 특수 토큰 제거
-            for token in self.remove_tokens:
-                pred_str = [p.replace(token, '').strip() for p in pred_str]
-                label_str = [l.replace(token, '').strip() for l in label_str]
-            
-            # ROUGE 점수 계산
-            all_scores = []
-            for p, l in zip(pred_str, label_str):
-                if not p.strip():
-                    print(f"\nEmpty prediction found: '{p}'")
-                    p = "empty"
-                if not l.strip():
-                    print(f"\nEmpty label found: '{l}'")
-                    l = "empty"
-                    
+            # 특수 토큰 제거 및 공백 정리
+            decoded_preds = [self._clean_text(pred) for pred in decoded_preds]
+            decoded_labels = [self._clean_text(label) for label in decoded_labels]
+            print(f"\nToken ranges:")
+            print(f"Predictions: [{predictions.min()}, {predictions.max()}]")
+            print(f"Labels: [{labels.min()}, {labels.max()}]")
+            # 샘플별 ROUGE 점수 계산 및 결과 저장
+            samples_data = []
+            for i, (pred, label) in enumerate(zip(decoded_preds, decoded_labels)):
                 try:
-                    score = self.rouge.get_scores(p, l)[0]
-                    all_scores.append(score)
+                    scores = self.rouge.get_scores(pred, label)[0]
+                    sample_data = {
+                        'id': i,
+                        'prediction': pred,
+                        'gold_summary': label,
+                        'rouge-1': scores['rouge-1']['f'],
+                        'rouge-2': scores['rouge-2']['f'],
+                        'rouge-l': scores['rouge-l']['f']
+                    }
+                    samples_data.append(sample_data)
                 except Exception as e:
-                    print(f"\nError calculating ROUGE for:")
-                    print(f"Prediction: '{p}'")
-                    print(f"Label: '{l}'")
-                    print(f"Error: {str(e)}")
-                    all_scores.append({'rouge-1': {'f': 0.0}, 'rouge-2': {'f': 0.0}, 'rouge-l': {'f': 0.0}})
+                    print(f"Error calculating ROUGE for sample {i}: {str(e)}")
+                    continue
             
-            # 평균 계산
-            avg_scores = {
-                'eval/rouge1_f1': np.mean([s['rouge-1']['f'] for s in all_scores]),
-                'eval/rouge2_f1': np.mean([s['rouge-2']['f'] for s in all_scores]),
-                'eval/rougeL_f1': np.mean([s['rouge-l']['f'] for s in all_scores])
+            # DataFrame 생성 및 저장
+            import pandas as pd
+            df = pd.DataFrame(samples_data)
+            
+            # 평균 ROUGE 점수 계산
+            result = {
+                'rouge1_f1': df['rouge-1'].mean(),
+                'rouge2_f1': df['rouge-2'].mean(),
+                'rougeL_f1': df['rouge-l'].mean()
             }
             
-            print("\n=== Final Scores ===")
-            print(avg_scores)
+            # 결과 저장
+            eval_step = f"step_{self.step}"
+            save_dir = self.output_dir / "eval_results" / eval_step
+            save_dir.mkdir(parents=True, exist_ok=True)
             
-            return avg_scores
+            # CSV 파일로 저장
+            df.to_csv(save_dir / "predictions_and_metrics.csv", index=False)
+            
+            # 통계 정보 저장
+            stats = {
+                'num_samples': len(df),
+                'avg_prediction_length': df['prediction'].str.len().mean(),
+                'avg_gold_length': df['gold_summary'].str.len().mean(),
+                'rouge_scores': result
+            }
+            
+            # wandb 로깅
+            if wandb.run is not None:
+                # 테이블 생성
+                columns = ["id", "prediction", "gold_summary", "rouge-1", "rouge-2", "rouge-l"]
+                data = [[d[col] for col in columns] for d in samples_data]
+                table = wandb.Table(columns=columns, data=data)
+                
+                # 로깅
+                wandb.log({
+                    f"eval/predictions_table_{eval_step}": table,
+                    "eval/rouge1_f1": result['rouge1_f1'],
+                    "eval/rouge2_f1": result['rouge2_f1'],
+                    "eval/rougeL_f1": result['rougeL_f1'],
+                    "eval/num_samples": stats['num_samples'],
+                    "eval/avg_prediction_length": stats['avg_prediction_length'],
+                    "eval/avg_gold_length": stats['avg_gold_length']
+                })
+            
+            return result
             
         except Exception as e:
             print(f"\n=== Error in Metric Calculation ===")
@@ -118,7 +137,14 @@ class TrainerMetrics:
             import traceback
             traceback.print_exc()
             return {
-                'eval/rouge1_f1': 0.0,
-                'eval/rouge2_f1': 0.0,
-                'eval/rougeL_f1': 0.0
-            } 
+                'rouge1_f1': 0.0,
+                'rouge2_f1': 0.0,
+                'rougeL_f1': 0.0
+            }
+            
+    def _clean_text(self, text: str) -> str:
+        """텍스트 정리"""
+        text = text.strip()
+        for token in self.remove_tokens:
+            text = text.replace(token, "")
+        return text if text else "empty" 
