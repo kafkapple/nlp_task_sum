@@ -128,37 +128,31 @@ class DataProcessor:
         if len(encoder_input['attention_mask'].shape) > 2:
             encoder_input['attention_mask'] = encoder_input['attention_mask'].squeeze(0)
         
+        # 레이블 데이터 준비 (학습/평가 모두에서 필요)
+        decoder_input = self.tokenizer(
+            df['summary'].tolist(),
+            max_length=self.config.encoder_max_len,
+            padding='max_length',
+            truncation=True,
+            return_tensors='pt'
+        )
+        
+        # labels는 decoder input과 동일하지만, padding token을 -100으로 변경
+        labels = decoder_input['input_ids'].clone()
+        labels[labels == self.tokenizer.pad_token_id] = -100
+        
         if is_train:
-            # 2. 레이블 데이터 준비 - 동일한 max_length 사용
-            decoder_input = self.tokenizer(
-                df['summary'].tolist(),
-                max_length=self.config.encoder_max_len,  # encoder와 동일한 max_length 사용
-                padding='max_length',
-                truncation=True,
-                return_tensors='pt'
-            )
-            
-            # labels는 decoder input과 동일하지만, padding token을 -100으로 변경
-            labels = decoder_input['input_ids'].clone()
-            labels[labels == self.tokenizer.pad_token_id] = -100
-            
             # 디버깅 출력 추가
             print("\n=== Dataset Debug Info ===")
             print(f"Input shape: {encoder_input['input_ids'].shape}")
             print(f"Labels shape: {labels.shape}")
             print(f"Attention mask shape: {encoder_input['attention_mask'].shape}")
-            
-            return DialogueDataset(
-                encoder_input=encoder_input,
-                labels={'labels': labels},
-                tokenizer=self.tokenizer
-            )
-        else:
-            return DialogueDataset(
-                encoder_input=encoder_input,
-                labels=None,
-                tokenizer=self.tokenizer
-            )
+        
+        return DialogueDataset(
+            encoder_input=encoder_input,
+            labels={'labels': labels},
+            tokenizer=self.tokenizer
+        )
 
 def load_dataset(data_path: str, split: str):
     """데이터셋 로드"""

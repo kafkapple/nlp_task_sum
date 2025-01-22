@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - model: kobart_sum_v3
+  - model: llama3_8b_kor_sum
   - train: default
 
 prompt_templates:

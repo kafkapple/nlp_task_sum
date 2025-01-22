@@ -188,7 +188,8 @@ class CustomTrainer(Seq2SeqTrainer):
 
     def compute_metrics(self, eval_preds):
         """메트릭 계산 및 로깅"""
-        metrics = self.args.compute_metrics(eval_preds)
+        # 부모 클래스의 compute_metrics 속성 사용
+        metrics = super().compute_metrics(eval_preds)
         
         # wandb에 메트릭 직접 로깅 (이미 eval/ 접두사가 있으므로 추가하지 않음)
         if wandb.run is not None:

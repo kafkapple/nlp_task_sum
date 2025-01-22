@@ -37,16 +37,24 @@ class TrainerMetrics:
         try:
             labels_ids = pred.label_ids
             pred_ids = pred.predictions
-            
+
+            # 예측값이 다양한 형태로 올 수 있으므로 적절히 처리
             if isinstance(pred_ids, tuple):
                 pred_ids = pred_ids[0]
+            elif hasattr(pred_ids, 'predictions'):
+                pred_ids = pred_ids.predictions
+            
+            # numpy 배열로 변환
+            pred_ids = np.array(pred_ids)
+            labels_ids = np.array(labels_ids)
             
             print("\n=== Metric Calculation Debug ===")
+            print(f"Predictions type: {type(pred_ids)}")
             print(f"Predictions shape: {pred_ids.shape}")
             print(f"Labels shape: {labels_ids.shape}")
             
             # -100을 pad_token_id로 변환
-            labels_ids = labels_ids.copy()  # 원본 데이터 보존
+            labels_ids = labels_ids.copy()
             labels_ids[labels_ids == -100] = self.tokenizer.pad_token_id
             
             # 음수 값 처리
