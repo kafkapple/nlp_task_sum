@@ -1,7 +1,7 @@
 defaults:
   - _self_
-  - model: solar
-  - train: default
+  - model: kobart
+  - train: train
 
 prompt_templates:
   "1":
@@ -57,16 +57,14 @@ prompt_templates:
       Summary:
 
 general:
-  seed: 2001 #42
+  seed: 42
   timestamp: ${now:%Y%m%d_%H%M%S}
   data_path: "data"
   output_path: "outputs/${now:%Y%m%d_%H%M%S}"
   model_cache_dir: "${hydra:runtime.cwd}/../models"
-
-wandb:
-  project: "dialogue-summary"
-  entity: "ailab_upstage_fastcampus"
-  name: ${general.timestamp}
+  wandb:
+    project: "dialogue-summary"
+    entity: "ailab_upstage_fastcampus"
 
 prompt:
   mode: "few-shot"
@@ -109,31 +107,6 @@ lora:
   dropout: 0.1
   target_modules: ["q_proj", "v_proj"]
 
-train:
-  training:
-    learning_rate: 2e-5
-    num_train_epochs: 2
-    per_device_train_batch_size: 4
-    per_device_eval_batch_size: 4
-    warmup_ratio: 0.1
-    weight_decay: 0.01
-    gradient_checkpointing: true
-    gradient_accumulation_steps: 4
-    fp16: true
-    bf16: false
-    evaluation_strategy: "epoch"
-    save_strategy: "epoch"
-    save_total_limit: 3
-    load_best_model_at_end: true
-    metric_for_best_model: "eval_rouge1_f1"
-    greater_is_better: true
-    predict_with_generate: true
-    generation_max_length: 128
-    generation_num_beams: 5
-    logging_dir: "${general.output_path}/logs"
-    logging_steps: 100
-    remove_unused_columns: false
-
 model:
   tokenizer:
     encoder_max_len: 512
@@ -145,15 +118,11 @@ model:
     temperature: 0.7
     top_p: 0.9
     do_sample: true
-    length_penalty: 1.0
-    repetition_penalty: 1.2
-    no_repeat_ngram_size: 3
-    early_stopping: true
 
 custom_config:
   temperature: 0.2
   top_p: 0.3
   few_shot: true
-  n_few_shot_samples: 1  # 사용할 few shot 예제 개수
-  few_shot_selection: "random" # "max_len_summary"  # random 또는 max_len_summary
+  n_few_shot_samples: 1
+  few_shot_selection: "random"
   n_val_samples: 100

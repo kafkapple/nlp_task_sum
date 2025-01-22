@@ -7,6 +7,7 @@ import os
 from dotenv import load_dotenv
 from huggingface_hub import login
 import importlib
+from peft import LoraConfig
 
 class ModelFactory:
     """Factory class for creating and managing various LLM models"""
@@ -102,13 +103,18 @@ class ModelFactory:
     @staticmethod
     def _create_quantization_config(config: DictConfig) -> Optional[BitsAndBytesConfig]:
         """Create quantization configuration"""
-        if not config.quantization.enabled:
+        # model.quantization이 없거나 enabled가 False면 None 반환
+        if not hasattr(config.model, 'quantization') or not config.model.quantization.enabled:
             return None
             
+        # 양자화 설정
+        precision = config.model.quantization.precision
+        compute_dtype = config.model.quantization.compute_dtype
+        
         return BitsAndBytesConfig(
-            load_in_8bit=config.quantization.precision == "int8",
-            load_in_4bit=config.quantization.precision == "int4",
-            bnb_4bit_compute_dtype=getattr(torch, config.quantization.compute_dtype),
+            load_in_8bit=(precision == "int8"),
+            load_in_4bit=(precision == "int4"),
+            bnb_4bit_compute_dtype=getattr(torch, compute_dtype),
             bnb_4bit_use_double_quant=True,
             bnb_4bit_quant_type="nf4"
         )
@@ -151,4 +157,20 @@ class ModelFactory:
         tokenizer = AutoTokenizer.from_pretrained(model_path)
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "right"
-        return tokenizer 
+        return tokenizer
+
+    @staticmethod
+    def _create_peft_config(model_family: str) -> LoraConfig:
+        """모델 계열별 LoRA 설정 생성"""
+        if model_family in ["bart", "t5"]:
+            return LoraConfig(
+                r=8,
+                lora_alpha=32,
+                target_modules=["q_proj", "v_proj", "k_proj", "out_proj"],
+                task_type="SEQ_2_SEQ_LM",
+                lora_dropout=0.1,
+                bias="none",
+                inference_mode=False
+            )
+        else:
+            raise ValueError(f"Unsupported model family: {model_family}") 

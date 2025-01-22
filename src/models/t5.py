@@ -5,6 +5,9 @@ from transformers.utils import logging
 import torch
 from typing import List
 from tqdm import tqdm
+from transformers import AutoModelForSeq2SeqLM
+from peft import get_peft_model
+from src.models.model_factory import ModelFactory
 
 @dataclass
 class TokenizerConfig:
@@ -26,28 +29,38 @@ class T5Summarizer(nn.Module):
         self.full_config = config
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
+        # 1. Quantization 설정
+        quantization_config = ModelFactory._create_quantization_config(config)
+        
+        # 2. 모델 초기화
+        self.model = AutoModelForSeq2SeqLM.from_pretrained(
+            self.config.name,
+            quantization_config=quantization_config,
+            device_map="auto",
+            torch_dtype=torch.float16
+        )
+        
+        # 3. LoRA 또는 Partial Training 적용
+        if config.model.mode == "finetune":
+            if config.model.get("partial_training", False):
+                self._freeze_layers(
+                    num_layers_to_train=config.model.get("num_layers_to_train", 2)
+                )
+            elif config.model.get("lora", False):
+                peft_config = ModelFactory._create_peft_config(config.model.family)
+                self.model = get_peft_model(self.model, peft_config)
+        
+        # 4. Gradient Checkpointing 활성화
+        if config.train.training.gradient_checkpointing:
+            self.model.gradient_checkpointing_enable()
+        
         # 1. 토크나이저 초기화
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.config.name,
             cache_dir=self.full_config.general.model_cache_dir
         )
         
-        # 2. 모델 초기화
-        model_kwargs = {
-            "cache_dir": self.full_config.general.model_cache_dir,
-        }
-        
-        # torch_dtype 설정이 있는 경우 추가
-        if hasattr(self.config, "model") and hasattr(self.config.model, "torch_dtype"):
-            if self.config.model.torch_dtype == "float16":
-                model_kwargs["torch_dtype"] = torch.float16
-        
-        self.model = T5ForConditionalGeneration.from_pretrained(
-            self.config.name,
-            **model_kwargs
-        ).to(self.device)
-        
-        # 3. 모델 설정 업데이트
+        # 2. 모델 설정 업데이트
         self.model.config.update({
             "decoder_start_token_id": self.tokenizer.pad_token_id,
             "pad_token_id": self.tokenizer.pad_token_id,
@@ -116,3 +129,24 @@ class T5Summarizer(nn.Module):
             return f"{prefix}Example Dialogue: {sample_dialogue}\nSummary: {sample_summary}\n\nDialogue: {dialogue}"
         else:  # zero-shot
             return f"{prefix}{dialogue}" 
+
+    def _freeze_layers(self, num_layers_to_train: int = 2):
+        """특정 레이어만 학습하도록 설정"""
+        # 모든 파라미터 freeze
+        for param in self.model.parameters():
+            param.requires_grad = False
+        
+        # Encoder의 마지막 N층 unfreeze
+        encoder_layers = self.model.encoder.block
+        for i in range(-num_layers_to_train, 0):
+            for param in encoder_layers[i].parameters():
+                param.requires_grad = True
+        
+        # Decoder의 마지막 N층 unfreeze
+        decoder_layers = self.model.decoder.block
+        for i in range(-num_layers_to_train, 0):
+            for param in decoder_layers[i].parameters():
+                param.requires_grad = True
+            # Cross-attention도 학습
+            for param in decoder_layers[i].layer[1].parameters():  # T5의 cross-attention은 layer[1]에 있음
+                param.requires_grad = True 

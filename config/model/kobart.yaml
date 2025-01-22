@@ -2,11 +2,18 @@ name: "gogamza/kobart-summarization"
 mode: "finetune"
 family: "bart"
 
+# 모델 특화 설정만 포함
+model:
+  partial_training: true
+  num_layers_to_train: 2
+  lora: true
+  quantization:
+    enabled: true
+    precision: "int8"
+    compute_dtype: "float16"
+
 tokenizer:
   max_length: 1024
-  padding: "max_length"
-  truncation: true
-  return_tensors: "pt"
   encoder_max_len: 1024
   decoder_max_len: 128
 
@@ -15,29 +22,54 @@ generation:
   max_length: 256
   min_length: 32
   length_penalty: 1.0
+  repetition_penalty: 1.2
+  no_repeat_ngram_size: 3
   early_stopping: true
+  max_new_tokens: 128
+  min_new_tokens: 10
+  temperature: 0.7
+  top_p: 0.9
+  do_sample: true
 
-train:
-  training:
-    num_train_epochs: 3
-    learning_rate: 5e-5
-    warmup_ratio: 0.1
-    weight_decay: 0.01
-    
-    per_device_train_batch_size: 8
-    per_device_eval_batch_size: 8
-    gradient_accumulation_steps: 4
-    gradient_checkpointing: true
-    
-    evaluation_strategy: "epoch"
-    save_strategy: "epoch"
-    save_total_limit: 2
-    load_best_model_at_end: true
-    metric_for_best_model: "eval_rouge1_f1"
-    greater_is_better: true
-    
-    logging_steps: 10
-    logging_first_step: true
-    
-    predict_with_generate: true
-    remove_unused_columns: true 
+# 또는
+# mode: "finetune"
+# family: "bart"
+# tokenizer:
+#   max_length: 1024
+#   padding: "max_length"
+#   truncation: true
+#   return_tensors: "pt"
+#   encoder_max_len: 1024
+#   decoder_max_len: 128
+#
+# generation:
+#   num_beams: 4
+#   max_length: 256
+#   min_length: 32
+#   length_penalty: 1.0
+#   early_stopping: true
+#
+# train:
+#   training:
+#     num_train_epochs: 3
+#     learning_rate: 5e-5
+#     warmup_ratio: 0.1
+#     weight_decay: 0.01
+#     
+#     per_device_train_batch_size: 8
+#     per_device_eval_batch_size: 8
+#     gradient_accumulation_steps: 4
+#     gradient_checkpointing: true
+#     
+#     evaluation_strategy: "epoch"
+#     save_strategy: "epoch"
+#     save_total_limit: 2
+#     load_best_model_at_end: true
+#     metric_for_best_model: "eval_rouge1_f1"
+#     greater_is_better: true
+#     
+#     logging_steps: 10
+#     logging_first_step: true
+#     
+#     predict_with_generate: true
+#     remove_unused_columns: true 

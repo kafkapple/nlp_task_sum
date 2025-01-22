@@ -59,20 +59,24 @@ def init_wandb(cfg: DictConfig):
         # 설정을 기본 Python 타입으로 변환
         config_dict = convert_to_basic_types(OmegaConf.to_container(cfg, resolve=True))
         
-        wandb.init(
-            project=cfg.wandb.project,
-            name=run_name,
-            config=config_dict,
-            group=cfg.model.family,
-            dir=str(output_dir),
-            settings=wandb.Settings(
-                start_method="thread",
-                _disable_stats=True,
-                _disable_meta=True
-            ),
-            mode="online",
-            reinit=True
-        )
+        # wandb 초기화
+        if hasattr(cfg.general, 'wandb'):
+            wandb.init(
+                project=cfg.general.wandb.project,
+                name=run_name,
+                config=config_dict,
+                group=cfg.model.family,
+                dir=str(output_dir),
+                settings=wandb.Settings(
+                    start_method="thread",
+                    _disable_stats=True,
+                    _disable_meta=True
+                ),
+                mode="online",
+                reinit=True
+            )
+        else:
+            print("Warning: wandb configuration not found in config. Running without wandb logging.")
         
         return output_dir
         
@@ -119,9 +123,6 @@ def main(cfg: DictConfig):
         setup_seeds(cfg.general.seed)
         pl.seed_everything(cfg.general.seed)
         
-        # timestamp 정의
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        
         # output_dir 초기화
         output_dir = init_wandb(cfg)
         
@@ -134,9 +135,10 @@ def main(cfg: DictConfig):
         
         if hasattr(model, 'model'):
             print(f"모델 파라미터 수: {get_model_size(model.model):,}")
-            wandb.config.update({
-                "model/num_parameters": int(get_model_size(model.model))
-            }, allow_val_change=True)
+            if wandb.run is not None:
+                wandb.config.update({
+                    "model/num_parameters": int(get_model_size(model.model))
+                }, allow_val_change=True)
         
         if cfg.model.mode == "prompt":
             print("프롬프트 모드로 실행 중...")
@@ -228,8 +230,8 @@ def main(cfg: DictConfig):
             train_dataset = processor.prepare_dataset("train")
             val_dataset = processor.prepare_dataset("dev")
             
-            # 모든 training 설정을 기본 타입으로 변환
-            train_config = convert_to_basic_types(OmegaConf.to_container(cfg.train.training, resolve=True))
+            # train_config를 config.train.training에서 가져오도록 수정
+            train_config = OmegaConf.to_container(cfg.train.training)
             
             # 설정 확인을 위한 디버그 출력
             print("\n=== Training Config ===")
@@ -237,52 +239,9 @@ def main(cfg: DictConfig):
                 print(f"{k}: {v}")
             print("=====================\n")
             
-            # 누락된 키에 대한 기본값 설정
-            default_config = {
-                # 기본 학습 설정
-                'max_grad_norm': 1.0,
-                'learning_rate': 2e-4,
-                'num_train_epochs': 3,
-                'warmup_ratio': 0.1,
-                'weight_decay': 0.01,
-                
-                # 배치 및 메모리 최적화
-                'per_device_train_batch_size': 2,
-                'per_device_eval_batch_size': 2,
-                'gradient_accumulation_steps': 8,
-                'gradient_checkpointing': True,
-                
-                # 하드웨어 최적화
-                'fp16': True,
-                'bf16': False,
-                'optim': 'paged_adamw_8bit',
-                
-                # 평가 및 저장 전략
-                'evaluation_strategy': 'epoch',
-                'save_strategy': 'epoch',
-                'save_total_limit': 2,
-                'load_best_model_at_end': True,
-                'metric_for_best_model': 'eval_rouge1_f1',
-                'greater_is_better': True,
-                
-                # 로깅
-                'logging_steps': 10,
-                'logging_first_step': True,
-                
-                # 생성 관련
-                'predict_with_generate': True,
-                'remove_unused_columns': True
-            }
-            
-            # 누락된 키 추가
-            for k, v in default_config.items():
-                if k not in train_config:
-                    train_config[k] = v
-                    print(f"Added missing config: {k} = {v}")
-            
             # generation 설정 가져오기
             generation_config = {
-                "max_new_tokens": cfg.model.generation.max_new_tokens,  # max_length 대신 max_new_tokens 사용
+                "max_new_tokens": cfg.model.generation.max_new_tokens,
                 "min_new_tokens": cfg.model.generation.min_new_tokens,
                 "num_beams": cfg.model.generation.num_beams,
                 "temperature": cfg.model.generation.temperature,
@@ -297,20 +256,20 @@ def main(cfg: DictConfig):
             # Training arguments 설정
             training_args = Seq2SeqTrainingArguments(
                 output_dir=str(output_dir),
-                run_name=f"{cfg.model.name}_{cfg.model.mode}_{timestamp}",
+                run_name=f"{cfg.model.name}_{cfg.model.mode}_{cfg.general.timestamp}",
                 
                 # 학습 설정
                 learning_rate=train_config['learning_rate'],
                 num_train_epochs=train_config['num_train_epochs'],
                 warmup_ratio=train_config['warmup_ratio'],
                 weight_decay=train_config['weight_decay'],
+                max_grad_norm=train_config['max_grad_norm'],
                 
                 # 배치 및 최적화 설정
                 per_device_train_batch_size=train_config['per_device_train_batch_size'],
                 per_device_eval_batch_size=train_config['per_device_eval_batch_size'],
                 gradient_accumulation_steps=train_config['gradient_accumulation_steps'],
                 gradient_checkpointing=train_config['gradient_checkpointing'],
-                max_grad_norm=train_config['max_grad_norm'],
                 
                 # 하드웨어 최적화
                 fp16=train_config['fp16'],
@@ -322,11 +281,11 @@ def main(cfg: DictConfig):
                 save_strategy=train_config['save_strategy'],
                 save_total_limit=train_config['save_total_limit'],
                 load_best_model_at_end=train_config['load_best_model_at_end'],
-                metric_for_best_model='eval_rouge1_f1',
-                greater_is_better=True,
+                metric_for_best_model=train_config['metric_for_best_model'],
+                greater_is_better=train_config['greater_is_better'],
                 
                 # 생성 설정
-                predict_with_generate=True,
+                predict_with_generate=train_config['predict_with_generate'],
                 generation_max_length=cfg.model.generation.max_new_tokens,
                 generation_num_beams=cfg.model.generation.num_beams,
                 

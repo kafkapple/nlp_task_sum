@@ -6,7 +6,9 @@ from torch.quantization import quantize_dynamic
 import torch
 from typing import List
 from tqdm import tqdm
-
+from peft import get_peft_model
+from src.models.model_factory import ModelFactory
+from transformers import AutoModelForSeq2SeqLM
 @dataclass
 class TokenizerConfig:
     bos_token: str
@@ -43,11 +45,33 @@ class BartSummarizer(nn.Module):
             if self.config.model.torch_dtype == "float16":
                 model_kwargs["torch_dtype"] = torch.float16
         
-        self.model = BartForConditionalGeneration.from_pretrained(
-            self.config.name,
-            **model_kwargs
-        ).to(self.device)
+        # self.model = BartForConditionalGeneration.from_pretrained(
+        #     self.config.name,
+        #     **model_kwargs
+        # ).to(self.device)
+        # 1. Quantization 설정
+        quantization_config = ModelFactory._create_quantization_config(config)
         
+        # 2. 모델 초기화
+        self.model = AutoModelForSeq2SeqLM.from_pretrained(
+            self.config.name,
+            quantization_config=quantization_config,
+            device_map="auto",
+            torch_dtype=torch.float16
+        )
+            # 3. LoRA 적용
+        if config.model.mode == "finetune":
+            if config.model.get("partial_training", False):  # 설정에서 partial training 활성화된 경우
+                self._freeze_layers(
+                    num_layers_to_train=config.model.get("num_layers_to_train", 2)
+                )
+            elif config.model.get("lora", False):  # LoRA 사용하는 경우
+                peft_config = ModelFactory._create_peft_config(config.model.family)
+                self.model = get_peft_model(self.model, peft_config)
+        
+        # 4. Gradient Checkpointing 활성화
+        if config.train.training.gradient_checkpointing:
+            self.model.gradient_checkpointing_enable()
         # 3. 모델 설정 업데이트
         self.model.config.update({
             "decoder_start_token_id": self.tokenizer.bos_token_id,
@@ -135,3 +159,24 @@ class BartSummarizer(nn.Module):
         else:
             # zero-shot 프롬프트
             return f"Dialogue:\n{dialogue}\nSummary:" 
+
+    def _freeze_layers(self, num_layers_to_train: int = 2):
+        """특정 레이어만 학습하도록 설정"""
+        # 모든 파라미터 freeze
+        for param in self.model.parameters():
+            param.requires_grad = False
+        
+        # Encoder의 마지막 N층 unfreeze
+        encoder_layers = self.model.model.encoder.layers
+        for i in range(-num_layers_to_train, 0):
+            for param in encoder_layers[i].parameters():
+                param.requires_grad = True
+        
+        # Decoder의 마지막 N층 unfreeze
+        decoder_layers = self.model.model.decoder.layers
+        for i in range(-num_layers_to_train, 0):
+            for param in decoder_layers[i].parameters():
+                param.requires_grad = True
+            # Cross-attention도 학습
+            for param in decoder_layers[i].encoder_attn.parameters():
+                param.requires_grad = True 
