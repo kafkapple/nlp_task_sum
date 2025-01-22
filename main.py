@@ -143,9 +143,16 @@ def main(cfg: DictConfig):
         
         if cfg.model.mode == "prompt":
             print("프롬프트 모드로 실행 중...")
-            processor = DataProcessor(None, cfg)
+            processor = DataProcessor(
+                tokenizer=None, 
+                config=None,
+                data_path=cfg.general.data_path
+            )
             print("데이터 로드 중...")
-            train_df, val_df, test_df = load_dataset(cfg.general.data_path)
+            train_df, val_df, test_df = load_dataset(
+                data_path=cfg.general.data_path,
+                split=None  # 모든 데이터셋 로드
+            )
             print(f"데이터 로드 완료 (train: {len(train_df)}, val: {len(val_df)}, test: {len(test_df)})")
             
             # few-shot 샘플 준비

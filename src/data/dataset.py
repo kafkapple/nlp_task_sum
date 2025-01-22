@@ -90,7 +90,36 @@ class DataProcessor:
     def __init__(self, tokenizer=None, config=None, data_path=None):
         self.tokenizer = tokenizer
         self.config = config
-        self.data_path = data_path
+        self.data_path = Path(data_path) if data_path is not None else None
+    
+    def load_data(self):
+        """CSV 파일들을 데이터프레임으로 로드
+        
+        Returns:
+            tuple: (train_df, val_df, test_df) 형태의 데이터프레임 튜플
+        
+        Raises:
+            ValueError: data_path가 None이거나 필요한 CSV 파일이 없는 경우
+        """
+        if self.data_path is None:
+            raise ValueError("data_path must be specified")
+            
+        # 필요한 파일들이 있는지 확인
+        required_files = ["train.csv", "dev.csv", "test.csv"]
+        for file in required_files:
+            if not (self.data_path / file).exists():
+                raise ValueError(f"Required file {file} not found in {self.data_path}")
+        
+        train_df = pd.read_csv(self.data_path / "train.csv")
+        val_df = pd.read_csv(self.data_path / "dev.csv")
+        test_df = pd.read_csv(self.data_path / "test.csv")
+        
+        print(f"\n=== Dataset Statistics ===")
+        print(f"Train set size: {len(train_df)}")
+        print(f"Validation set size: {len(val_df)}")
+        print(f"Test set size: {len(test_df)}")
+        
+        return train_df, val_df, test_df
         
     def prepare_dataset(self, split: str):
         """데이터셋 준비"""
@@ -154,8 +183,21 @@ class DataProcessor:
             tokenizer=self.tokenizer
         )
 
-def load_dataset(data_path: str, split: str):
-    """데이터셋 로드"""
-    processor = DataProcessor(tokenizer=None, config=None, data_path=data_path)  # data_path 직접 전달
+def load_dataset(data_path: str, split: str = None):
+    """데이터셋 로드
+    
+    Args:
+        data_path: 데이터 경로
+        split: 'train', 'dev', 'test' 중 하나. None이면 모든 데이터셋 반환
+    
+    Returns:
+        split이 None이면 (train_df, val_df, test_df) 튜플 반환
+        split이 지정되면 해당하는 단일 데이터프레임 반환
+    """
+    processor = DataProcessor(tokenizer=None, config=None, data_path=data_path)
     train_df, val_df, test_df = processor.load_data()
+    
+    if split is None:
+        return train_df, val_df, test_df
+    
     return train_df if split == "train" else val_df if split == "dev" else test_df 
