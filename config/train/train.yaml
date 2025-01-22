@@ -1,7 +1,7 @@
 # 기본 학습 설정
 training:
   # 기본 학습 설정
-  num_train_epochs: 3
+  num_train_epochs: 1
   learning_rate: 2e-4
   warmup_ratio: 0.1
   weight_decay: 0.01
@@ -9,9 +9,9 @@ training:
   optim: "paged_adamw_8bit"
   
   # 배치 및 메모리 최적화
-  per_device_train_batch_size: 2
-  per_device_eval_batch_size: 2
-  gradient_accumulation_steps: 8
+  per_device_train_batch_size: 32
+  per_device_eval_batch_size: 32
+  gradient_accumulation_steps: 1
   gradient_checkpointing: true
   
   # 하드웨어 최적화

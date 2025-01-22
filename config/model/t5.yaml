@@ -3,15 +3,14 @@ mode: "finetune"
 family: "t5"
 
 # 모델 특화 설정
-
-partial_training: true
-num_layers_to_train: 2
-lora: false
-quantization:
-  enabled: false
-  precision: "int8"
-  compute_dtype: "float16"
-
+model:
+  partial_training: true
+  num_layers_to_train: 2
+  lora: true
+  quantization:
+    enabled: true
+    precision: "int8"
+    compute_dtype: "float16"
 tokenizer:
   max_length: 1024
   padding: "max_length"
@@ -24,14 +23,12 @@ generation:
   num_beams: 4
   max_length: 256
   min_length: 32
-  temperature: 1.0
-  top_p: 0.95
-  repetition_penalty: 1.0
   length_penalty: 1.0
+  repetition_penalty: 1.2
+  no_repeat_ngram_size: 3
   early_stopping: true
-
-# 학습 전략 설정 추가
-partial_training: true  # 부분 학습 활성화
-num_layers_to_train: 2  # 학습할 레이어 수
-# 또는
-lora: false  # LoRA 사용 여부 
+  max_new_tokens: 128
+  min_new_tokens: 10
+  temperature: 0.7
+  top_p: 0.9
+  do_sample: true
