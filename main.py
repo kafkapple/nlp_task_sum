@@ -1,3 +1,6 @@
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"  # 토크나이저 병렬화 경고 비활성화
+
 import hydra
 from omegaconf import DictConfig
 import warnings
@@ -156,7 +159,7 @@ def main(cfg: DictConfig):
             # Training arguments 설정
             training_args = Seq2SeqTrainingArguments(
                 output_dir=str(output_dir),
-                run_name=f"{cfg.general.timestamp}",
+                run_name=f"{cfg.model.name}_{cfg.model.mode}_{cfg.general.timestamp}",
                 
                 # 학습 설정
                 learning_rate=train_config['learning_rate'],
@@ -190,12 +193,13 @@ def main(cfg: DictConfig):
                 generation_num_beams=cfg.model.generation.num_beams,
                 
                 # 로깅
+                logging_dir=str(output_dir / "logs"),
+                logging_strategy="steps",
                 logging_steps=train_config['logging_steps'],
                 logging_first_step=train_config['logging_first_step'],
                 
                 # wandb 관련 설정
-                report_to=[],
-                disable_tqdm=False,
+                report_to="none",  # wandb 로깅을 직접 처리하므로 HF의 기본 로깅은 비활성화
                 
                 # accelerator 관련 설정
                 ddp_find_unused_parameters=False,
@@ -215,9 +219,9 @@ def main(cfg: DictConfig):
                 args=training_args,
                 train_dataset=train_dataset,
                 eval_dataset=val_dataset,
-                tokenizer=model.tokenizer,
+                tokenizer=model.tokenizer,  # tokenizer 대신 processing_class 사용
                 compute_metrics=metrics,
-                remove_tokens=cfg.inference.remove_tokens,
+                # remove_tokens 제거 (TrainerMetrics에서 처리)
                 callbacks=[WandBCallback()]  # WandB 콜백 명시적 추가
             )
             

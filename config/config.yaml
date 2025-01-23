@@ -4,7 +4,7 @@ defaults:
   - train: train
 
 debug:
-  enabled: false
+  enabled: true
   train_samples: 10
   val_samples: 2
 prompt_templates:

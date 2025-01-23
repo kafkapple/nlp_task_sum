@@ -1,74 +1,94 @@
-from transformers import Trainer, TrainerCallback, GenerationConfig, PreTrainedTokenizerBase
-from typing import Dict, List, Optional, Union
+from transformers import Trainer, TrainerCallback
+from typing import Dict, List, Optional, Union, Any
 import wandb
 import torch
 import numpy as np
-from rouge import Rouge  # 원본 baseline 방식으로 변경
 from pathlib import Path
 import os
-from src.utils.metrics import TrainerMetrics  # 메트릭 클래스 import
+import torch.nn as nn
 
 class WandBCallback(TrainerCallback):
     """WandB 로깅을 위한 콜백"""
+    def __init__(self):
+        self._initialized = False
+        
+    def setup(self, args, state, model):
+        """초기 설정"""
+        if not self._initialized and state.is_world_process_zero:
+            wandb.define_metric("train/global_step")
+            wandb.define_metric("train/*", step_metric="train/global_step")
+            wandb.define_metric("eval/*", step_metric="train/global_step")
+            self._initialized = True
+    
+    def on_train_begin(self, args, state, control, **kwargs):
+        """학습 시작 시 처리"""
+        self.setup(args, state, kwargs.get('model'))
     
     def on_log(self, args, state, control, logs=None, **kwargs):
         """로그 이벤트 처리"""
         if state.is_world_process_zero and logs:
-            # step 정보 추가
-            if state.global_step is not None:
-                logs["train/global_step"] = state.global_step
+            # train/ 접두사 추가
+            logged_logs = {}
+            for k, v in logs.items():
+                if k == "epoch":
+                    logged_logs[k] = v
+                elif k == "loss":
+                    logged_logs["train/loss"] = v
+                elif k == "learning_rate":
+                    logged_logs["train/learning_rate"] = v
+                elif not k.startswith(("train/", "eval/")):
+                    logged_logs[f"train/{k}"] = v
+                else:
+                    logged_logs[k] = v
             
-            # loss와 learning rate 로깅
-            if "loss" in logs:
-                logs["train/loss"] = logs.pop("loss")
-            if "learning_rate" in logs:
-                logs["train/learning_rate"] = logs.pop("learning_rate")
-                
-            wandb.log(logs, step=state.global_step)
-            
-    def on_train_begin(self, args, state, control, **kwargs):
-        """학습 시작 시 처리"""
-        if state.is_world_process_zero:
-            # 메트릭 정의
-            wandb.define_metric("train/global_step")
-            wandb.define_metric("train/*", step_metric="train/global_step")
-            wandb.define_metric("eval/*", step_metric="train/global_step")
-            
+            if wandb.run is not None:
+                wandb.log(logged_logs, step=state.global_step)
+    
     def on_train_end(self, args, state, control, **kwargs):
         """학습 종료 시 처리"""
-        if state.is_world_process_zero:
+        if state.is_world_process_zero and wandb.run is not None:
             wandb.finish()
 
-    def on_evaluate(self, args, state, control, metrics=None, **kwargs):
-        """평가 단계 처리"""
-        if state.is_world_process_zero and metrics:
-            # eval 메트릭 로깅
-            eval_metrics = {}
-            for k, v in metrics.items():
-                metric_name = k if k.startswith('eval/') else f'eval/{k}'
-                eval_metrics[metric_name] = v
-            
-            wandb.log(eval_metrics, step=state.global_step)
-
 class CustomTrainer(Trainer):
-    def __init__(self, *args, remove_tokens=None, **kwargs):
+    def __init__(self, *args, **kwargs):
+        if 'tokenizer' in kwargs:
+            kwargs['processing_class'] = kwargs.pop('tokenizer')
         super().__init__(*args, **kwargs)
-        self.remove_tokens = remove_tokens or []
-        
-    def log(self, logs: Dict[str, float]) -> None:
-        """로깅 오버라이드"""
-        if self.state.epoch is not None:
-            logs["epoch"] = round(self.state.epoch, 4)
+        self._wandb_initialized = False
 
-        if "learning_rate" in logs:
-            logs["train/learning_rate"] = logs.pop("learning_rate")
-        if "loss" in logs:
-            logs["train/loss"] = logs.pop("loss")
+    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], return_loss=True, return_outputs=False):
+        """학습 스텝 오버라이드"""
+        model.train()
+        inputs = self._prepare_inputs(inputs)
+        
+        with self.compute_loss_context_manager():
+            loss = self.compute_loss(model, inputs)
             
-        output = {**logs}
-        if self.is_world_process_zero():
-            self.log_metrics("train", output)
-            self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
+        if self.args.gradient_accumulation_steps > 1:
+            loss = loss / self.args.gradient_accumulation_steps
+            
+        loss.backward()
+        
+        if return_outputs:
+            with torch.no_grad():
+                outputs = model(**inputs)
+            return (loss.detach(), outputs)
+        return loss.detach()
+
+    def compute_metrics(self, eval_preds):
+        """메트릭 계산"""
+        if not hasattr(self, "compute_metrics_fn"):
+            return {}
+            
+        metrics = self.compute_metrics_fn(eval_preds)
+        
+        # eval/ 접두사 추가
+        metrics = {
+            f"eval/{k}" if not k.startswith('eval/') else k: v 
+            for k, v in metrics.items()
+        }
+        
+        return metrics
 
     def prediction_step(self, model, inputs, prediction_loss_only, ignore_keys=None):
         """오버라이드된 prediction_step"""
@@ -96,20 +116,4 @@ class CustomTrainer(Trainer):
         else:
             loss = None
             
-        return (loss, generated_tokens, inputs["labels"])
-
-    def compute_metrics(self, eval_preds):
-        """메트릭 계산 및 로깅"""
-        metrics = self.compute_metrics_fn(eval_preds)
-        
-        # wandb에 메트릭 로깅
-        if self.is_world_process_zero() and wandb.run is not None:
-            logged_metrics = {}
-            for k, v in metrics.items():
-                # eval/ 접두사가 없는 경우에만 추가
-                metric_name = k if k.startswith('eval/') else f'eval/{k}'
-                logged_metrics[metric_name] = v
-                
-            wandb.log(logged_metrics, step=self.state.global_step)
-            
-        return metrics 
+        return (loss, generated_tokens, inputs["labels"]) 
