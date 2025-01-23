@@ -3,6 +3,10 @@ defaults:
   - model: kobart
   - train: train
 
+debug:
+  enabled: false
+  train_samples: 10
+  val_samples: 2
 prompt_templates:
   "1":
     system: |

@@ -134,6 +134,15 @@ def main(cfg: DictConfig):
             )
             train_dataset = processor.prepare_dataset("train")
             val_dataset = processor.prepare_dataset("dev")
+            if cfg.debug.enabled:
+                train_dataset = torch.utils.data.Subset(
+                    train_dataset,
+                    range(min(len(train_dataset), cfg.debug.train_samples))
+                )
+                val_dataset = torch.utils.data.Subset(
+                    val_dataset,
+                    range(min(len(val_dataset), cfg.debug.val_samples))
+                )
             
             # train_config를 config.train.training에서 가져오도록 수정
             train_config = OmegaConf.to_container(cfg.train.training)
