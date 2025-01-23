@@ -25,6 +25,19 @@ def log_rouge(scores, wandb_logger):
         wandb_logger.experiment.log({dict_rouge[key]: value})
         print(f"{dict_rouge[key]}: {value}")
 
+def convert_to_basic_types(obj):
+    """OmegaConf 설정을 기본 Python 타입으로 변환"""
+    if isinstance(obj, dict):
+        return {k: convert_to_basic_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_basic_types(v) for v in obj]
+    elif isinstance(obj, (str, int, float, bool)):
+        return obj
+    elif obj is None:
+        return None
+    else:
+        return str(obj)
+
 def init_logger(cfg):
     """Initialize wandb logger"""
     try:
@@ -33,7 +46,7 @@ def init_logger(cfg):
             wandb.finish()
             
         timestamp = cfg.general.timestamp
-        run_name = f"{cfg.model.name}_{cfg.model.mode}_{timestamp}"
+        run_name = f"{timestamp}"
         
         # output_path 생성
         output_dir = Path(cfg.general.output_path)
@@ -73,13 +86,13 @@ def init_logger(cfg):
                 reinit=True
             )
         else:
-            print("Warning: wandb configuration not found in config. Running without wandb logging.")
+            print("wandb 설정을 찾을 수 없습니다. wandb 로깅 없이 실행합니다.")
             
         return output_dir
         
     except Exception as e:
-        print(f"Warning: wandb initialization failed: {str(e)}")
-        print("Continuing without wandb logging...")
+        print(f"wandb 초기화 실패: {str(e)}")
+        print("wandb 로깅 없이 계속 실행합니다...")
         return Path(cfg.general.output_path)
 
 load_dotenv()
