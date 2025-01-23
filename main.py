@@ -216,9 +216,9 @@ def main(cfg: DictConfig):
         
     except Exception as e:
         print(f"Error in training: {str(e)}")
-        if wandb.run is not None:
-            wandb.finish()
-        raise
+        # if wandb.run is not None:
+        #     wandb.finish()
+        # raise
         
     finally:
         # 프로그램 종료 시 wandb 정리

@@ -15,14 +15,16 @@ from pytorch_lightning import seed_everything
 from pytorch_lightning.loggers import WandbLogger
 import openai
 
-def log_rouge(scores, wandb_logger):
-    dict_rouge ={
+def log_rouge(scores):
+    """ROUGE 점수를 wandb에 기록"""
+    dict_rouge = {
         "rouge-1": "eval/rouge1_f1",
         "rouge-2": "eval/rouge2_f1",
         "rouge-l": "eval/rougeL_f1",
     }
     for key, value in scores.items():
-        wandb_logger.experiment.log({dict_rouge[key]: value})
+        if wandb.run is not None:
+            wandb.log({dict_rouge[key]: value})
         print(f"{dict_rouge[key]}: {value}")
 
 def convert_to_basic_types(obj):
@@ -398,7 +400,7 @@ def main(cfg: DictConfig):
 
     scores =validate(cfg,val_df,client,sample_dialogue,sample_summary,n_val_samples)[0]
     print(scores)
-    log_rouge(scores, wandb_logger)
+    log_rouge(scores)
 
     output = inference(cfg,client,test_df,sample_dialogue,sample_summary)
     wandb.finish()
