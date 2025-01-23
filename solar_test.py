@@ -9,6 +9,7 @@ import wandb
 from pathlib import Path
 from omegaconf import DictConfig, OmegaConf
 import hydra
+import shutil
 
 from pytorch_lightning import seed_everything
 from pytorch_lightning.loggers import WandbLogger
@@ -24,15 +25,63 @@ def log_rouge(scores, wandb_logger):
         wandb_logger.experiment.log({dict_rouge[key]: value})
         print(f"{dict_rouge[key]}: {value}")
 
-def init_logger(cfg: DictConfig):
-    return WandbLogger(
-        project=cfg.general.wandb.project,
-        entity=cfg.general.wandb.entity,
-        name= f"{cfg.general.timestamp}",
-        config=OmegaConf.to_container(cfg, resolve=True),
-        group=cfg.model.family,
-        dir=cfg.general.output_path,
-    )
+def init_logger(cfg):
+    """Initialize wandb logger"""
+    try:
+        # 이전 wandb 프로세스 정리
+        if wandb.run is not None:
+            wandb.finish()
+            
+        timestamp = cfg.general.timestamp
+        run_name = f"{cfg.model.name}_{cfg.model.mode}_{timestamp}"
+        
+        # output_path 생성
+        output_dir = Path(cfg.general.output_path)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # config 폴더 복사
+        config_dir = Path("config")
+        output_config_dir = output_dir / "config"
+        if config_dir.exists():
+            if output_config_dir.exists():
+                shutil.rmtree(output_config_dir)
+            shutil.copytree(config_dir, output_config_dir)
+            print(f"Copied config files to {output_config_dir}")
+        
+        # wandb 설정
+        os.environ["WANDB_DIR"] = str(output_dir)
+        os.environ["WANDB_START_METHOD"] = "thread"
+        os.environ["WANDB_WATCH"] = "false"  # 모델 가중치 로깅 비활성화
+        
+        # 설정을 기본 Python 타입으로 변환
+        config_dict = convert_to_basic_types(OmegaConf.to_container(cfg, resolve=True))
+        
+        # wandb 초기화
+        if hasattr(cfg.general, 'wandb'):
+            wandb.init(
+                project=cfg.general.wandb.project,
+                name=run_name,
+                config=config_dict,
+                group=cfg.model.family,
+                dir=str(output_dir),
+                settings=wandb.Settings(
+                    start_method="thread",
+                    _disable_stats=True,
+                    _disable_meta=True
+                ),
+                mode="online",
+                reinit=True
+            )
+        else:
+            print("Warning: wandb configuration not found in config. Running without wandb logging.")
+            
+        return output_dir
+        
+    except Exception as e:
+        print(f"Warning: wandb initialization failed: {str(e)}")
+        print("Continuing without wandb logging...")
+        return Path(cfg.general.output_path)
+
 load_dotenv()
 
 

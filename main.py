@@ -3,16 +3,10 @@ from omegaconf import DictConfig
 import warnings
 import torchvision
 from typing import List
-import pandas as pd
-import os
-import numpy as np
-import random
 import torch
 import wandb
 from pathlib import Path
-from transformers import Seq2SeqTrainingArguments, GenerationConfig
-import pytorch_lightning as pl
-from datetime import datetime
+from transformers import Seq2SeqTrainingArguments
 from omegaconf import OmegaConf
 
 # Beta transforms 경고 끄기
@@ -153,7 +147,7 @@ def main(cfg: DictConfig):
             # Training arguments 설정
             training_args = Seq2SeqTrainingArguments(
                 output_dir=str(output_dir),
-                run_name=f"{cfg.model.name}_{cfg.model.mode}_{cfg.general.timestamp}",
+                run_name=f"{cfg.general.timestamp}",
                 
                 # 학습 설정
                 learning_rate=train_config['learning_rate'],

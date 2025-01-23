@@ -1,6 +1,6 @@
-name: "solar-api"  # wandb 로깅용
-family: "solar"
+name: "upstage/SOLAR-10.7B-Instruct-v1.0"
 mode: "prompt"
+family: "solar"
 
 # API 설정
 api:
@@ -10,7 +10,23 @@ api:
 
 # 생성 설정
 generation:
-  max_new_tokens: 64
-  temperature: 0.2
-  top_p: 0.95
+  num_beams: 5
+  max_new_tokens: 200  # 200자 * 3토큰
+  min_new_tokens: 50   # 50자 * 3토큰
+  length_penalty: 1.0
+  repetition_penalty: 1.2
+  no_repeat_ngram_size: 3
+  early_stopping: true
+  temperature: 0.7
+  top_p: 0.9
+  top_k: 50
+  do_sample: true
   stop_sequences: ["###", "대화", "Summary:", "Dialogue:"]
+
+tokenizer:
+  max_length: 2048
+  padding: "max_length"
+  truncation: true
+  return_tensors: "pt"
+  encoder_max_len: 2048
+  decoder_max_len: 200

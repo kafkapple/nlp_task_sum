@@ -83,10 +83,10 @@ class BartSummarizer(nn.Module):
             "is_encoder_decoder": True,
             "task": "summarization",
             "problem_type": "seq2seq_lm",
-            # 분류 관련 설정 제거 - None 대신 기본값 사용
-            # "num_labels": 2,  # 기본값으로 설정
-            # "id2label": {0: "LABEL_0", 1: "LABEL_1"},
-            # "label2id": {"LABEL_0": 0, "LABEL_1": 1}
+            "max_new_tokens": self.config.generation.max_new_tokens,
+            "min_new_tokens": self.config.generation.min_new_tokens,
+            "length_penalty": self.config.generation.length_penalty,
+            "early_stopping": self.config.generation.early_stopping
         })
         
         # 4. 특수 토큰 추가 (설정된 경우)
@@ -135,8 +135,8 @@ class BartSummarizer(nn.Module):
             # 요약 생성
             outputs = self.model.generate(
                 **inputs,
-                max_length=self.config.generation.max_new_tokens,
-                min_length=self.config.generation.min_length,
+                max_new_tokens=self.config.generation.max_new_tokens,
+                min_new_tokens=self.config.generation.min_new_tokens,
                 num_beams=self.config.generation.num_beams,
                 temperature=self.config.generation.temperature,
                 top_p=self.config.generation.top_p,

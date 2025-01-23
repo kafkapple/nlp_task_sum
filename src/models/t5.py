@@ -68,10 +68,10 @@ class T5Summarizer(nn.Module):
             "eos_token_id": self.tokenizer.eos_token_id,
             "is_encoder_decoder": True,
             "task": "summarization",
-            # "max_length": self.config.generation.max_length,
-            # "min_length": self.config.generation.min_length,
-            # "length_penalty": self.config.generation.length_penalty,
-            # "early_stopping": self.config.generation.early_stopping
+            "max_new_tokens": self.config.generation.max_new_tokens,
+            "min_new_tokens": self.config.generation.min_new_tokens,
+            "length_penalty": self.config.generation.length_penalty,
+            "early_stopping": self.config.generation.early_stopping
         })
         
         # 4. 특수 토큰 추가 (설정된 경우)
@@ -104,8 +104,8 @@ class T5Summarizer(nn.Module):
             # 요약 생성
             outputs = self.model.generate(
                 **inputs,
-                max_length=self.config.generation.max_length,
-                min_length=self.config.generation.min_length,
+                max_new_tokens=self.config.generation.max_new_tokens,
+                min_new_tokens=self.config.generation.min_new_tokens,
                 num_beams=self.config.generation.num_beams,
                 temperature=self.config.generation.temperature,
                 top_p=self.config.generation.top_p,
