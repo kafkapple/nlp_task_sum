@@ -1,4 +1,4 @@
-name: "upstage/SOLAR-10.7B-Instruct-v1.0"
+name: "solar-1-mini-chat"
 mode: "prompt"
 family: "solar"
 

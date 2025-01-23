@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - model: kobart
+  - model: t5
   - train: train
 
 debug:
@@ -63,7 +63,7 @@ prompt_templates:
 general:
   seed: 42
   timestamp: ${now:%Y%m%d_%H%M%S}
-  data_path: "${hydra:runtime.cwd}/data"
+  data_path: "data" #"${hydra:runtime.cwd}/data"
   output_path: "outputs/${now:%Y%m%d_%H%M%S}"
   model_cache_dir: "${hydra:runtime.cwd}/../models"
   wandb:
