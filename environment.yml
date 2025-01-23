@@ -24,3 +24,5 @@ dependencies:
     - wget==3.2
     - peft==0.4.0
     - datasets>=2.0.0 
+    - matplotlib
+    - seaborn

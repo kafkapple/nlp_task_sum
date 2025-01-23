@@ -84,9 +84,9 @@ class BartSummarizer(nn.Module):
             "task": "summarization",
             "problem_type": "seq2seq_lm",
             # 분류 관련 설정 제거 - None 대신 기본값 사용
-            "num_labels": 2,  # 기본값으로 설정
-            "id2label": {0: "LABEL_0", 1: "LABEL_1"},
-            "label2id": {"LABEL_0": 0, "LABEL_1": 1}
+            # "num_labels": 2,  # 기본값으로 설정
+            # "id2label": {0: "LABEL_0", 1: "LABEL_1"},
+            # "label2id": {"LABEL_0": 0, "LABEL_1": 1}
         })
         
         # 4. 특수 토큰 추가 (설정된 경우)

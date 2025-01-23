@@ -43,6 +43,16 @@ def init_wandb(cfg: DictConfig):
         output_dir = Path(cfg.general.output_path)
         output_dir.mkdir(parents=True, exist_ok=True)
         
+        # config 폴더 복사
+        import shutil
+        config_dir = Path("config")
+        output_config_dir = output_dir / "config"
+        if config_dir.exists():
+            if output_config_dir.exists():
+                shutil.rmtree(output_config_dir)
+            shutil.copytree(config_dir, output_config_dir)
+            print(f"Copied config files to {output_config_dir}")
+        
         # wandb 설정
         os.environ["WANDB_DIR"] = str(output_dir)
         os.environ["WANDB_START_METHOD"] = "thread"

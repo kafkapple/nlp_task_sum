@@ -12,22 +12,26 @@ quantization:
   compute_dtype: "float16"
 
 tokenizer:
-  max_length: 1024
+  #max_length: 1024
   encoder_max_len: 1024
-  decoder_max_len: 128
+  decoder_max_len: 100
+  padding: "max_length"
+  truncation: true
+  return_tensors: "pt"
 
 generation:
-  num_beams: 4
-  max_length: 256
-  min_length: 32
-  length_penalty: 1.0
-  repetition_penalty: 1.2
+  num_beams: 5
+  # max_length: 150
+  # min_length: 50
+  length_penalty: 0.8
+  repetition_penalty: 2.0
   no_repeat_ngram_size: 3
   early_stopping: true
-  max_new_tokens: 128
-  min_new_tokens: 10
+  max_new_tokens: 200
+  min_new_tokens: 50
   temperature: 0.7
   top_p: 0.9
+  top_k: 50
   do_sample: true
 
 # 또는
