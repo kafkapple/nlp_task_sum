@@ -44,6 +44,18 @@ class WandBCallback(TrainerCallback):
             if wandb.run is not None:
                 wandb.log(logged_logs, step=state.global_step)
     
+    def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+        """평가 단계에서의 로깅"""
+        if state.is_world_process_zero and metrics:
+            # eval/ 접두사 추가
+            logged_metrics = {}
+            for k, v in metrics.items():
+                metric_name = k if k.startswith('eval/') else f'eval/{k}'
+                logged_metrics[metric_name] = v
+            
+            if wandb.run is not None:
+                wandb.log(logged_metrics, step=state.global_step)
+    
     def on_train_end(self, args, state, control, **kwargs):
         """학습 종료 시 처리"""
         if state.is_world_process_zero and wandb.run is not None:
@@ -87,6 +99,10 @@ class CustomTrainer(Trainer):
             f"eval/{k}" if not k.startswith('eval/') else k: v 
             for k, v in metrics.items()
         }
+        
+        # wandb에 직접 로깅
+        if self.is_world_process_zero() and wandb.run is not None:
+            wandb.log(metrics, step=self.state.global_step)
         
         return metrics
 
