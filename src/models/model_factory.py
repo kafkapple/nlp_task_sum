@@ -53,15 +53,21 @@ class ModelFactory:
         module = importlib.import_module(f"src.models.{family['module']}")
         model_class = getattr(module, family['class'])
         
+        # config를 딕셔너리로 변환
+        from omegaconf import OmegaConf
+        model_dict = OmegaConf.to_container(config.model)
+        
         # 프롬프트 템플릿 설정 병합
         if hasattr(config, 'prompt_templates'):
-            from omegaconf import OmegaConf
-            # 기존 모델 설정을 딕셔너리로 변환
-            model_dict = OmegaConf.to_container(config.model)
-            # prompt_templates 추가
             model_dict['prompt_templates'] = OmegaConf.to_container(config.prompt_templates)
-            # 새로운 구조체 생성
-            config.model = OmegaConf.create(model_dict)
+        
+        # 양자화 설정
+        if config.model.quantization.enabled:
+            quantization_config = cls._create_quantization_config(config)
+            model_dict['quantization_config'] = quantization_config
+        
+        # 새로운 구조체 생성
+        config.model = OmegaConf.create(model_dict)
         
         return model_class(config)
 
@@ -101,23 +107,24 @@ class ModelFactory:
         return model, tokenizer
 
     @staticmethod
-    def _create_quantization_config(config: DictConfig) -> Optional[BitsAndBytesConfig]:
+    def _create_quantization_config(config: DictConfig):
         """Create quantization configuration"""
-        # model.quantization이 없거나 enabled가 False면 None 반환
         if not hasattr(config.model, 'quantization') or not config.model.quantization.enabled:
             return None
-            
-        # 양자화 설정
-        precision = config.model.quantization.precision
-        compute_dtype = config.model.quantization.compute_dtype
         
-        return BitsAndBytesConfig(
-            load_in_8bit=(precision == "int8"),
-            load_in_4bit=(precision == "int4"),
-            bnb_4bit_compute_dtype=getattr(torch, compute_dtype),
-            bnb_4bit_use_double_quant=True,
-            bnb_4bit_quant_type="nf4"
-        )
+        precision = config.model.quantization.precision
+        compute_dtype = getattr(torch, config.model.quantization.compute_dtype)
+        
+        if precision == "int8":
+            return {"load_in_8bit": True}
+        elif precision == "int4":
+            return {
+                "load_in_4bit": True,
+                "bnb_4bit_compute_dtype": compute_dtype,
+                "bnb_4bit_use_double_quant": True
+            }
+        
+        return None
 
     @staticmethod
     def _load_model(model_path: str, quantization_config: Optional[BitsAndBytesConfig] = None, cache_dir: str = "") -> AutoModelForCausalLM:

@@ -1,9 +1,14 @@
 # 기본 학습 설정
 training:
-  # 기본 학습 설정
+  # 학습 설정
   num_train_epochs: 1
-  learning_rate: 2e-4
-  warmup_ratio: 0.1
+  learning_rate: 1e-4
+  
+  # Learning rate scheduler 설정
+  lr_scheduler_type: "cosine"  # cosine scheduler 사용
+  warmup_ratio: 0.1  # 전체 학습의 10%를 warmup에 사용
+  
+  # 기타 최적화 설정
   weight_decay: 0.01
   max_grad_norm: 1.0
   optim: "paged_adamw_8bit"

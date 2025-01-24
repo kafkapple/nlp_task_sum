@@ -153,10 +153,14 @@ def main(cfg: DictConfig):
                 output_dir=str(output_dir),
                 run_name=f"{cfg.model.name.split('/')[-1]}_{cfg.model.mode}_{cfg.general.timestamp}",
                 
+                # Learning rate scheduler 설정
+                lr_scheduler_type="cosine",  # cosine scheduler 사용
+                warmup_ratio=train_config['warmup_ratio'],  # warmup 비율
+                warmup_steps=0,  # warmup_ratio를 사용할 때는 0으로 설정
+                
                 # 학습 설정
                 learning_rate=train_config['learning_rate'],
                 num_train_epochs=train_config['num_train_epochs'],
-                warmup_ratio=train_config['warmup_ratio'],
                 weight_decay=train_config['weight_decay'],
                 max_grad_norm=train_config['max_grad_norm'],
                 

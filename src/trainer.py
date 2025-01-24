@@ -8,6 +8,7 @@ import os
 import torch.nn as nn
 from rouge import Rouge
 import pandas as pd
+from omegaconf import OmegaConf
 
 class WandBCallback(TrainerCallback):
     """WandB 로깅을 위한 콜백"""
@@ -21,7 +22,6 @@ class WandBCallback(TrainerCallback):
             wandb.define_metric("train/global_step")
             wandb.define_metric("train/*", step_metric="train/global_step")
             wandb.define_metric("eval/*", step_metric="train/global_step")
-            # 새로운 메트릭 정의
             wandb.define_metric("train/loss", summary="min")
             wandb.define_metric("train/learning_rate", summary="last")
             wandb.define_metric("eval/loss", summary="min")
@@ -32,6 +32,25 @@ class WandBCallback(TrainerCallback):
     def on_train_begin(self, args, state, control, **kwargs):
         """학습 시작 시 처리"""
         self.setup(args, state, kwargs.get('model'))
+        
+        # OmegaConf 설정을 기본 Python 타입으로 변환
+        if hasattr(args, 'to_dict'):
+            config_dict = args.to_dict()
+        else:
+            config_dict = vars(args)
+            
+        # 중첩된 OmegaConf 객체 처리
+        def convert_to_basic_types(obj):
+            if isinstance(obj, (dict, OmegaConf)):
+                return {k: convert_to_basic_types(v) for k, v in obj.items()}
+            elif isinstance(obj, (list, tuple)):
+                return [convert_to_basic_types(i) for i in obj]
+            return obj
+            
+        config_dict = convert_to_basic_types(config_dict)
+        
+        if wandb.run is not None:
+            wandb.config.update(config_dict, allow_val_change=True)
     
     def on_log(self, args, state, control, logs=None, **kwargs):
         """로그 이벤트 처리"""
@@ -41,9 +60,9 @@ class WandBCallback(TrainerCallback):
                 if k == "epoch":
                     logged_logs[k] = v
                 elif k == "loss":
-                    logged_logs["train/loss"] = v  # 학습 손실
+                    logged_logs["train/loss"] = v
                 elif k == "learning_rate":
-                    logged_logs["train/learning_rate"] = v  # 학습률
+                    logged_logs["train/learning_rate"] = v
                 elif not k.startswith(("train/", "eval/")):
                     logged_logs[f"train/{k}"] = v
                 else:

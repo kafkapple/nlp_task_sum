@@ -110,7 +110,7 @@ huggingface:
 
 custom_config:
   inference: false
-  few_shot: false
+  few_shot: true
   n_few_shot_samples: 1
   few_shot_selection: "baseline"
   n_val_samples: 100
