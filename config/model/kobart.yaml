@@ -23,7 +23,9 @@ tokenizer:
   decoder_max_len: 200
   bos_token: "<s>"
   eos_token: "</s>"
-  special_tokens: ${common/default.additional_special_tokens}  # common 참조 방식 수정
+  special_tokens:
+    additional_special_tokens: ${common.additional_special_tokens}  # 참조 방식 수정
+# common 참조 방식 수정
 
 generation:
   num_beams: 5

@@ -100,7 +100,12 @@ class BartSummarizer(BaseModel):
             logging.warning(f"Quantization failed: {str(e)}")
 
     def forward(self, **inputs):
-        return self.model(**inputs) 
+        """Forward pass for training"""
+        return self.model(**inputs)  # loss 계산을 위한 forward pass
+
+    def generate(self, **inputs):
+        """Generation for inference"""
+        return self.model.generate(**inputs)
 
     def batch_summarize(self, dialogues: List[str], sample_dialogue: str = None, 
                        sample_summary: str = None, prompt_version: str = "v1") -> List[str]:
