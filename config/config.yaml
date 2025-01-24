@@ -63,7 +63,7 @@ prompt_templates:
 general:
   seed: 42
   timestamp: ${now:%Y%m%d_%H%M%S}
-  data_path: "data" #"${hydra:runtime.cwd}/data"
+  data_path: "${hydra:runtime.cwd}/data"
   output_path: "outputs/${now:%Y%m%d_%H%M%S}"
   model_cache_dir: "${hydra:runtime.cwd}/../models"
   wandb:
@@ -125,3 +125,14 @@ custom_config:
   top_k: 50
   do_sample: true
   stop_sequences: ["###", "대화", "Summary:", "Dialogue:"]
+
+common:
+  additional_special_tokens:
+    - "#PhoneNumber#"
+    - "#Address#"
+    - "#DateOfBirth#"
+    - "#PassportNumber#"
+    - "#SSN#"
+    - "#CardNumber#"
+    - "#CarNumber#"
+    - "#Email#" 

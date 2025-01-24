@@ -22,7 +22,7 @@ from src.models.model_factory import ModelFactory
 from src.utils.utils import save_predictions, get_model_size, print_samples, setup_seeds, init_wandb
 from src.utils.metrics import Metrics, TrainerMetrics
 from src.trainer import CustomTrainer, WandBCallback
-
+from src.inference import DialogueInference
 
 @hydra.main(version_base="1.2", config_path="config", config_name="config")
 def main(cfg: DictConfig):
@@ -234,6 +234,8 @@ def main(cfg: DictConfig):
         # raise
         
     finally:
+        inference = DialogueInference(cfg)
+        inference.inference(cfg.general.data_path)
         # 프로그램 종료 시 wandb 정리
         if wandb.run is not None:
             wandb.finish()

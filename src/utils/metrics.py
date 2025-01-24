@@ -39,7 +39,7 @@ class TrainerMetrics:
         self.tokenizer = tokenizer
         self.remove_tokens = remove_tokens or []
         self.rouge = Rouge()
-        self.output_dir = Path(config.general.output_dir) if hasattr(config.general, 'output_dir') else Path('outputs')
+        self.output_dir = Path(config.general.output_path) if hasattr(config.general, 'output_path') else Path('outputs')
         self.step = 0
         
     def __call__(self, eval_preds):
@@ -98,6 +98,7 @@ class TrainerMetrics:
             # 결과 저장 경로 확실히 생성
             eval_step = f"step_{self.step}"
             save_dir = self.output_dir / "eval_results" / eval_step
+            print(f"Saving directory: {save_dir}")
             save_dir.mkdir(parents=True, exist_ok=True)
             
             # CSV 파일로 저장 시 경로 확인 로그 추가

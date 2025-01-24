@@ -126,21 +126,23 @@ class DataProcessor:
         # 데이터 로드
         df = pd.read_csv(f"{self.data_path}/{split}.csv")
         
-        # 빈 summary 체크 및 처리
-        empty_summaries = df['summary'].isna().sum()
-        if empty_summaries > 0:
-            print(f"Warning: Found {empty_summaries} empty summaries in {split} set")
-            df = df.dropna(subset=['summary'])
-        
         # 데이터 검증
         print(f"\n=== {split} Dataset Info ===")
         print(f"Total samples: {len(df)}")
         print("\nSample lengths:")
         print(f"Dialogue min/max/mean length: {df['dialogue'].str.len().min()}/{df['dialogue'].str.len().max()}/{df['dialogue'].str.len().mean():.1f}")
-        print(f"Summary min/max/mean length: {df['summary'].str.len().min()}/{df['summary'].str.len().max()}/{df['summary'].str.len().mean():.1f}")
+        
+        # train/val 데이터일 경우에만 summary 관련 처리
+        if 'summary' in df.columns:
+            # 빈 summary 체크 및 처리
+            empty_summaries = df['summary'].isna().sum()
+            if empty_summaries > 0:
+                print(f"Warning: Found {empty_summaries} empty summaries in {split} set")
+                df = df.dropna(subset=['summary'])
+            print(f"Summary min/max/mean length: {df['summary'].str.len().min()}/{df['summary'].str.len().max()}/{df['summary'].str.len().mean():.1f}")
         
         # BART 모델용 데이터셋 준비
-        return self._prepare_bart_dataset(df, split == "train")
+        return self._prepare_bart_dataset(df, is_train='summary' in df.columns)
         
     def _prepare_bart_dataset(self, df: pd.DataFrame, is_train: bool) -> DialogueDataset:
         """Bart 모델용 데이터셋 준비"""
@@ -157,10 +159,17 @@ class DataProcessor:
         if len(encoder_input['attention_mask'].shape) > 2:
             encoder_input['attention_mask'] = encoder_input['attention_mask'].squeeze(0)
         
-        # 레이블 데이터 준비 (학습/평가 모두에서 필요)
+        # 테스트 데이터의 경우 labels 없이 반환
+        if not is_train:
+            return DialogueDataset(
+                encoder_input=encoder_input,
+                labels=None
+            )
+        
+        # 2. 출력 데이터 준비 (학습 시에만)
         decoder_input = self.tokenizer(
             df['summary'].tolist(),
-            max_length=self.config.encoder_max_len,
+            max_length=self.config.decoder_max_len,
             padding='max_length',
             truncation=True,
             return_tensors='pt'
@@ -170,17 +179,9 @@ class DataProcessor:
         labels = decoder_input['input_ids'].clone()
         labels[labels == self.tokenizer.pad_token_id] = -100
         
-        if is_train:
-            # 디버깅 출력 추가
-            print("\n=== Dataset Debug Info ===")
-            print(f"Input shape: {encoder_input['input_ids'].shape}")
-            print(f"Labels shape: {labels.shape}")
-            print(f"Attention mask shape: {encoder_input['attention_mask'].shape}")
-        
         return DialogueDataset(
             encoder_input=encoder_input,
-            labels={'labels': labels},
-            tokenizer=self.tokenizer
+            labels={'labels': labels}
         )
 
 def load_dataset(data_path: str, split: str = None):

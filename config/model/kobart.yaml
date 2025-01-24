@@ -1,3 +1,6 @@
+# defaults:
+#   - ../common  # 이 부분 제거
+
 name: "gogamza/kobart-summarization"
 mode: "finetune"
 family: "bart"
@@ -12,12 +15,15 @@ quantization:
   compute_dtype: "float16"
 
 tokenizer:
-  #max_length: 1024
-  encoder_max_len: 1024
-  decoder_max_len: 100
+  max_length: 512
   padding: "max_length"
   truncation: true
   return_tensors: "pt"
+  encoder_max_len: 512
+  decoder_max_len: 200
+  bos_token: "<s>"
+  eos_token: "</s>"
+  special_tokens: ${common/default.additional_special_tokens}  # common 참조 방식 수정
 
 generation:
   num_beams: 5

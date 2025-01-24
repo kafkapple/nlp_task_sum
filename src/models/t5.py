@@ -8,6 +8,7 @@ from tqdm import tqdm
 from transformers import AutoModelForSeq2SeqLM
 from peft import get_peft_model
 from src.models.model_factory import ModelFactory
+from src.models.base_model import BaseModel
 
 @dataclass
 class TokenizerConfig:
@@ -22,7 +23,7 @@ class DialogueSummarizerConfig:
     model_name: str
     tokenizer: TokenizerConfig
 
-class T5Summarizer(nn.Module):
+class T5Summarizer(BaseModel):
     def __init__(self, config):
         super().__init__()
         self.config = config.model
@@ -39,20 +40,6 @@ class T5Summarizer(nn.Module):
             device_map="auto",
             torch_dtype=torch.float16
         )
-        
-        # 3. LoRA 또는 Partial Training 적용
-        if config.model.mode == "finetune":
-            if config.model.get("partial_training", False):
-                self._freeze_layers(
-                    num_layers_to_train=config.model.get("num_layers_to_train", 2)
-                )
-            elif config.model.get("lora", False):
-                peft_config = ModelFactory._create_peft_config(config.model.family)
-                self.model = get_peft_model(self.model, peft_config)
-        
-        # 4. Gradient Checkpointing 활성화
-        if config.train.training.gradient_checkpointing:
-            self.model.gradient_checkpointing_enable()
         
         # 1. 토크나이저 초기화
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -74,26 +61,50 @@ class T5Summarizer(nn.Module):
             "early_stopping": self.config.generation.early_stopping
         })
         
-        # 4. 특수 토큰 추가 (설정된 경우)
-        if hasattr(self.config, 'tokenizer') and hasattr(self.config.tokenizer, 'special_tokens'):
-            special_tokens_dict = {
-                'additional_special_tokens': [
-                    "#Person1#", "#Person2#", "#Person3#",
-                    "#PhoneNumber#", "#Address#", "#PassportNumber#"
-                ]
-            }
-            self.tokenizer.add_special_tokens(special_tokens_dict)
-            self.model.resize_token_embeddings(len(self.tokenizer))
+        # 3. 특수 토큰 추가 - BaseModel의 메서드 사용
+        if hasattr(self.config.tokenizer, 'special_tokens'):
+            self._add_special_tokens(
+                self.tokenizer,
+                self.config.tokenizer.special_tokens.additional_special_tokens
+            )
+        
+        # 4. LoRA 또는 Partial Training 적용
+        if config.model.mode == "finetune":
+            if config.model.get("partial_training", False):
+                self._freeze_layers(
+                    num_layers_to_train=config.model.get("num_layers_to_train", 2)
+                )
+            elif config.model.get("lora", False):
+                peft_config = ModelFactory._create_peft_config(config.model.family)
+                self.model = get_peft_model(self.model, peft_config)
+        
+        # 5. Gradient Checkpointing 활성화
+        if config.train.training.gradient_checkpointing:
+            self.model.gradient_checkpointing_enable()
+
+    def forward(self, **inputs):
+        """Forward pass for training"""
+        return self.model(**inputs)
+
+    def generate(self, **inputs):
+        """Generation for inference"""
+        return self.model.generate(**inputs)
 
     def batch_summarize(self, dialogues: List[str], sample_dialogue: str = None, 
-                       sample_summary: str = None, prompt_version: str = "v1") -> List[str]:
-        """배치 단위로 요약 생성"""
+                       sample_summary: str = None, prompt_version: str = None) -> List[str]:
+        """배치 단위 요약 생성"""
         summaries = []
+        
         for dialogue in tqdm(dialogues, desc="Generating summaries"):
             # 프롬프트 생성
-            prompt = self._build_prompt(dialogue, sample_dialogue, sample_summary, prompt_version)
+            prompt = self._build_prompt(
+                dialogue, 
+                sample_dialogue, 
+                sample_summary, 
+                prompt_version
+            )
             
-            # 입력 인코딩
+            # 토크나이징
             inputs = self.tokenizer(
                 prompt, 
                 return_tensors="pt", 
@@ -122,13 +133,12 @@ class T5Summarizer(nn.Module):
     def _build_prompt(self, dialogue: str, sample_dialogue: str = None, 
                      sample_summary: str = None, prompt_version: str = "v1") -> str:
         """프롬프트 생성"""
-        # T5는 task prefix를 사용
-        prefix = "summarize: "
-        
-        if sample_dialogue and sample_summary:  # few-shot
-            return f"{prefix}Example Dialogue: {sample_dialogue}\nSummary: {sample_summary}\n\nDialogue: {dialogue}"
-        else:  # zero-shot
-            return f"{prefix}{dialogue}" 
+        if sample_dialogue and sample_summary:
+            # few-shot 프롬프트
+            return f"Dialogue:\n{sample_dialogue}\nSummary:\n{sample_summary}\n\nDialogue:\n{dialogue}\nSummary:"
+        else:
+            # zero-shot 프롬프트
+            return f"Dialogue:\n{dialogue}\nSummary:"
 
     def _freeze_layers(self, num_layers_to_train: int = 2):
         """특정 레이어만 학습하도록 설정"""

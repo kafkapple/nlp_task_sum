@@ -1,3 +1,6 @@
+# defaults:
+#   - ../common  # common.yaml 참조
+
 name: "eenzeenee/t5-base-korean-summarization"
 mode: "finetune"
 family: "t5"
@@ -12,12 +15,16 @@ quantization:
   precision: "int8"
   compute_dtype: "float16"
 tokenizer:
-  max_length: 512 # 1024
+  max_length: 512
   padding: "max_length"
   truncation: true
   return_tensors: "pt"
-  encoder_max_len: 512 # 1024
+  encoder_max_len: 512
   decoder_max_len: 200
+  bos_token: "<s>"
+  eos_token: "</s>"
+  special_tokens:
+    additional_special_tokens: ${common.additional_special_tokens}  # 참조 방식 수정
 
 generation:
   num_beams: 5
