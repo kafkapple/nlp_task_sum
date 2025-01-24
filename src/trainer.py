@@ -8,7 +8,7 @@ import os
 import torch.nn as nn
 from rouge import Rouge
 import pandas as pd
-from omegaconf import OmegaConf
+from omegaconf import OmegaConf, ListConfig, DictConfig
 
 class WandBCallback(TrainerCallback):
     """WandB 로깅을 위한 콜백"""
@@ -33,24 +33,33 @@ class WandBCallback(TrainerCallback):
         """학습 시작 시 처리"""
         self.setup(args, state, kwargs.get('model'))
         
-        # OmegaConf 설정을 기본 Python 타입으로 변환
-        if hasattr(args, 'to_dict'):
-            config_dict = args.to_dict()
-        else:
-            config_dict = vars(args)
-            
-        # 중첩된 OmegaConf 객체 처리
         def convert_to_basic_types(obj):
-            if isinstance(obj, (dict, OmegaConf)):
-                return {k: convert_to_basic_types(v) for k, v in obj.items()}
-            elif isinstance(obj, (list, tuple)):
-                return [convert_to_basic_types(i) for i in obj]
+            """OmegaConf 객체를 기본 Python 타입으로 변환"""
+            if isinstance(obj, (DictConfig, dict)):
+                return {k: convert_to_basic_types(v) for k, v in dict(obj).items()}
+            elif isinstance(obj, (ListConfig, list, tuple)):
+                return [convert_to_basic_types(i) for i in list(obj)]
+            elif hasattr(obj, 'to_dict'):
+                return convert_to_basic_types(obj.to_dict())
+            elif hasattr(obj, '__dict__'):
+                return convert_to_basic_types(vars(obj))
             return obj
-            
-        config_dict = convert_to_basic_types(config_dict)
         
-        if wandb.run is not None:
-            wandb.config.update(config_dict, allow_val_change=True)
+        try:
+            # 설정을 기본 타입으로 변환
+            if isinstance(args, (DictConfig, ListConfig)):
+                config_dict = OmegaConf.to_container(args, resolve=True)
+            else:
+                config_dict = vars(args)
+            
+            # 중첩된 설정 처리
+            config_dict = convert_to_basic_types(config_dict)
+            
+            # wandb에 로깅
+            if wandb.run is not None:
+                wandb.config.update(config_dict, allow_val_change=True)
+        except Exception as e:
+            print(f"Warning: Failed to update wandb config: {str(e)}")
     
     def on_log(self, args, state, control, logs=None, **kwargs):
         """로그 이벤트 처리"""
