@@ -30,8 +30,8 @@ generation:
   num_beams: 5
   max_new_tokens: 200  # 200자 * 3토큰
   min_new_tokens: 50   # 50자 * 3토큰
-  length_penalty: 1.0
-  repetition_penalty: 1.2
+  length_penalty: 0.8
+  repetition_penalty: 2.0
   no_repeat_ngram_size: 3
   early_stopping: true
   temperature: 0.7

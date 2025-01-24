@@ -6,11 +6,10 @@ from torch.quantization import quantize_dynamic
 import torch
 from typing import List
 from tqdm import tqdm
-from peft import get_peft_model, LoraConfig, TaskType
+from peft import get_peft_model
 from src.models.model_factory import ModelFactory
 from transformers import AutoModelForSeq2SeqLM
 from src.models.base_model import BaseModel
-from omegaconf import DictConfig, OmegaConf
 
 @dataclass
 class TokenizerConfig:
@@ -32,25 +31,22 @@ class BartSummarizer(BaseModel):
         self.full_config = config
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        # Quantization 설정
-        self.quantization_config = getattr(config.model, 'quantization_config', None)
+        # 1. Quantization 설정
+        quantization_config = ModelFactory._create_quantization_config(config)  # 학습시엔 불필요
         
-        # 모델과 토크나이저 초기화
-        self.model = self._load_model()
-        self.tokenizer = self._load_tokenizer()
+        # 2. 모델 초기화
+        self.model = BartForConditionalGeneration.from_pretrained(
+            self.config.name,
+            quantization_config=quantization_config,  # 제거
+            device_map="auto",  # 단일 GPU면 "cuda:0"로 명시
+            torch_dtype=torch.float16
+        )
         
-        # LoRA 설정
-        if self.config.mode == "finetune" and self.config.lora.enabled:
-            peft_config = LoraConfig(
-                task_type=TaskType.SEQ_2_SEQ_LM,
-                inference_mode=False,
-                r=self.config.lora.r,
-                lora_alpha=self.config.lora.alpha,
-                lora_dropout=self.config.lora.dropout,
-                target_modules=self.config.lora.target_modules
-            )
-            self.model = get_peft_model(self.model, peft_config)
-            self.model.print_trainable_parameters()
+        # 1. 토크나이저 초기화
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.config.name,
+            cache_dir=self.full_config.general.model_cache_dir
+        )
         
         # 2. 모델 설정 업데이트
         self.model.config.update({
@@ -75,6 +71,16 @@ class BartSummarizer(BaseModel):
                 self.tokenizer,
                 self.config.tokenizer.special_tokens.additional_special_tokens
             )
+        
+        # 4. LoRA 또는 Partial Training 적용
+        if config.model.mode == "finetune":
+            if config.model.get("partial_training", False):
+                self._freeze_layers(
+                    num_layers_to_train=config.model.get("num_layers_to_train", 2)
+                )
+            elif config.model.get("lora", False):
+                peft_config = ModelFactory._create_peft_config(config.model.family)
+                self.model = get_peft_model(self.model, peft_config)
         
         # 5. Gradient Checkpointing 활성화
         if config.train.training.gradient_checkpointing:
@@ -170,49 +176,3 @@ class BartSummarizer(BaseModel):
         for param in self.model.lm_head.parameters():
             if param.dtype in [torch.float16, torch.float32, torch.float64]:
                 param.requires_grad = True 
-
-    def _load_model(self):
-        """모델 로드"""
-        # 양자화 설정이 있으면 딕셔너리로 변환
-        quantization_config = None
-        if hasattr(self.config, 'quantization') and self.config.quantization.enabled:
-            if self.config.quantization.precision == "int8":
-                quantization_config = {"load_in_8bit": True}
-            elif self.config.quantization.precision == "int4":
-                quantization_config = {
-                    "load_in_4bit": True,
-                    "bnb_4bit_compute_dtype": getattr(torch, self.config.quantization.compute_dtype)
-                }
-        
-        model = BartForConditionalGeneration.from_pretrained(
-            self.config.name,
-            device_map="auto",
-            torch_dtype=torch.float16,
-            quantization_config=quantization_config
-        )
-        
-        # LoRA 설정
-        if self.config.lora.enabled:
-            peft_config = LoraConfig(
-                task_type=TaskType.SEQ_2_SEQ_LM,
-                inference_mode=False,
-                r=self.config.lora.r,
-                lora_alpha=self.config.lora.alpha,
-                lora_dropout=self.config.lora.dropout,
-                target_modules=self.config.lora.target_modules
-            )
-            model = get_peft_model(model, peft_config)
-            model.print_trainable_parameters()
-        
-        return model
-
-    def _load_tokenizer(self):
-        tokenizer = AutoTokenizer.from_pretrained(
-            self.config.name,
-            cache_dir=self.full_config.general.model_cache_dir
-        )
-        return tokenizer
-
-    def _add_special_tokens(self, tokenizer, special_tokens):
-        # Implementation of _add_special_tokens method
-        pass 

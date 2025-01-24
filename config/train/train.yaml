@@ -1,21 +1,20 @@
 # 기본 학습 설정
 training:
-  # 학습 설정
-  num_train_epochs: 10
+  # 기본 학습 설정
+  num_train_epochs: 20
   learning_rate: 1e-4
-  
-  # Learning rate scheduler 설정
-  lr_scheduler_type: "cosine"  # cosine scheduler 사용
-  warmup_ratio: 0.1  # 전체 학습의 10%를 warmup에 사용
-  
-  # 기타 최적화 설정
+  warmup_ratio: 0.1
   weight_decay: 0.01
   max_grad_norm: 1.0
   optim: "paged_adamw_8bit"
   
+  # 스케줄러 설정 추가
+  lr_scheduler_type: "cosine"  # 코사인 스케줄러 사용
+  warmup_steps: 100           # 또는 warmup_ratio 대신 직접 스텝 수 지정
+  
   # 배치 및 메모리 최적화
-  per_device_train_batch_size: 4
-  per_device_eval_batch_size: 4
+  per_device_train_batch_size: 32
+  per_device_eval_batch_size: 32
   gradient_accumulation_steps: 2
   gradient_checkpointing: true
   
@@ -32,9 +31,9 @@ training:
   greater_is_better: true
   
   # 로깅 관련 설정
-  logging_strategy: "steps"  # 또는 "epoch"
-  logging_steps: 10         # 로깅 주기
-  logging_first_step: true
+  logging_strategy: "steps"     # step 단위 로깅
+  logging_steps: 10            # 10 스텝마다 로깅
+  logging_first_step: true     # 첫 스텝부터 로깅
   logging_dir: "${general.output_path}/logs"
   report_to: ["wandb", "tensorboard"]  # wandb와 tensorboard 모두 사용
   
