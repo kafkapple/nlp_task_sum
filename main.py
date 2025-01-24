@@ -11,6 +11,7 @@ import wandb
 from pathlib import Path
 from transformers import Seq2SeqTrainingArguments
 from omegaconf import OmegaConf
+import pandas as pd
 
 # Beta transforms 경고 끄기
 torchvision.disable_beta_transforms_warning()
@@ -23,6 +24,7 @@ from src.utils.utils import save_predictions, get_model_size, print_samples, set
 from src.utils.metrics import Metrics, TrainerMetrics
 from src.trainer import CustomTrainer, WandBCallback
 from src.inference import DialogueInference
+from src.utils.few_shot_selector import FewShotSelector
 
 @hydra.main(version_base="1.2", config_path="config", config_name="config")
 def main(cfg: DictConfig):
@@ -62,22 +64,11 @@ def main(cfg: DictConfig):
             )
             print(f"데이터 로드 완료 (train: {len(train_df)}, val: {len(val_df)}, test: {len(test_df)})")
             
-            # few-shot 샘플 준비
-            sample_dialogue = None
-            sample_summary = None
-            
-            if cfg.prompt.mode == "few-shot":
-                print("Few-shot 샘플 준비 중...")
-                # pandas의 sample 메서드에 random_state 전달
-                few_shot_samples = train_df.sample(
-                    n=cfg.prompt.n_samples, 
-                    random_state=cfg.general.seed  # 여기도 seed 전달
-                )
-                sample_dialogue = few_shot_samples.iloc[0]['dialogue']
-                sample_summary = few_shot_samples.iloc[0]['summary']
-                print(f"\nFew-shot 샘플:")
-                print(f"대화: {sample_dialogue}")
-                print(f"요약: {sample_summary}\n")
+            # Few-shot 예제 선택 로직
+            if cfg.custom_config.few_shot:
+                examples = FewShotSelector.select_examples(train_df, cfg)
+                sample_dialogue = examples["dialogue"]
+                sample_summary = examples["summary"]
             
             # Initialize metrics
             metrics = Metrics(config=cfg)

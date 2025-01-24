@@ -1,0 +1,131 @@
+defaults:
+  - _self_
+  - model: kobart
+  - train: train
+
+debug:
+  enabled: true
+  train_samples: 10
+  val_samples: 2
+prompt_templates:
+  "1":
+    system: |
+      You are a Korean dialogue summarizer. Follow these rules:
+      1. Summarize the dialogue in Korean only
+      2. Keep the summary concise and simple
+      3. Do not include any English text
+      4. Focus on the key points only
+    few_shot: |
+      다음 지시사항에 따라 대화를 요약하세요:
+      1. 한국어로만 요약하세요
+      2. 간단명료하게 작성하세요
+      3. 핵심 내용만 포함하세요
+
+      Sample Dialogue:
+      {sample_dialogue}
+
+      Sample Summary:
+      {sample_summary}
+
+      Dialogue:
+      {dialogue}
+
+      Summary:
+    zero_shot: |
+      Summarize the following dialogue:
+      Dialogue: {dialogue}
+      Summary:
+  "2":
+    system: |
+      You are a Korean dialogue summarizer. Provide a concise summary in Korean only.
+      Rules:
+      1. Only output the summary, nothing else
+      2. Do not include any instructions or markers
+      3. Keep it simple and focused
+    instruction: |
+      Please summarize the following dialogue in Korean.
+      Be concise and focus on the key points.
+    few_shot:
+      user: |
+        Dialogue:
+        {sample_dialogue}
+        Summary:
+      assistant: "{sample_summary}"
+      final_user: |
+        Dialogue:
+        {dialogue}
+        Summary:
+    zero_shot: |
+      Create a concise summary of this dialogue:
+      Dialogue: {dialogue}
+      Summary:
+
+general:
+  seed: 42
+  timestamp: ${now:%Y%m%d_%H%M%S}
+  data_path: "${hydra:runtime.cwd}/data"
+  output_path: "outputs/${now:%Y%m%d_%H%M%S}"
+  model_cache_dir: "${hydra:runtime.cwd}/../models"
+  wandb:
+    project: "dialogue-summary"
+    entity: "ailab_upstage_fastcampus"
+
+prompt:
+  mode: "few-shot"
+  version: "v2"
+  n_samples: 100
+  save_predictions: true
+  system: "You are a expert in the field of dialogue summarization..."
+  instruction: |
+    Following the instructions below...
+
+inference:
+  batch_size: 32
+  ckt_path: "${general.output_path}/checkpoint-500"
+  no_repeat_ngram_size: 3
+  early_stopping: true
+  # generate_max_length: 200
+  max_new_tokens: 200  # 200자 * 3토큰
+  min_new_tokens: 50 # 100자 * 3토큰\
+  num_beams: 5
+  remove_tokens: 
+    - <usr>
+    - <s>
+    - </s>
+    - <pad>
+
+url:
+  data: "https://aistages-api-public-prod.s3.amazonaws.com/app/Competitions/000342/data/data.tar.gz"
+  code: "https://aistages-api-public-prod.s3.amazonaws.com/app/Competitions/000342/data/code.tar.gz"
+
+metrics:
+  rouge-1: eval/rouge1_f1
+  rouge-2: eval/rouge2_f1
+  rouge-l: eval/rougeL_f1
+
+huggingface:
+  token: ${oc.env:HUGGINGFACE_TOKEN}
+  cache_dir: ${general.model_cache_dir}
+
+custom_config:
+  few_shot: true
+  n_few_shot_samples: 1
+  few_shot_selection: "baseline"
+  n_val_samples: 100
+  temperature: 0.3
+  max_new_tokens: 150
+  top_p: 0.8
+  top_k: 50
+  do_sample: true
+  stop_sequences: ["###", "대화", "Summary:", "Dialogue:"]
+
+common:
+  additional_special_tokens:
+    - "#PhoneNumber#"
+    - "#Address#"
+    - "#DateOfBirth#"
+    - "#PassportNumber#"
+    - "#SSN#"
+    - "#CardNumber#"
+    - "#CarNumber#"
+    - "#Email#" 

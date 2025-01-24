@@ -32,13 +32,13 @@ class BartSummarizer(BaseModel):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         # 1. Quantization 설정
-        quantization_config = ModelFactory._create_quantization_config(config)
+        quantization_config = ModelFactory._create_quantization_config(config)  # 학습시엔 불필요
         
         # 2. 모델 초기화
         self.model = BartForConditionalGeneration.from_pretrained(
             self.config.name,
-            quantization_config=quantization_config,
-            device_map="auto",
+            quantization_config=quantization_config,  # 제거
+            device_map="auto",  # 단일 GPU면 "cuda:0"로 명시
             torch_dtype=torch.float16
         )
         

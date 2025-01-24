@@ -69,22 +69,24 @@ class CustomTrainer(Trainer):
         self._wandb_initialized = False
 
     def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], return_loss=True, return_outputs=False):
-        """학습 스텝 오버라이드"""
+        """학습 스텝 최적화"""
         model.train()
         inputs = self._prepare_inputs(inputs)
         
         with self.compute_loss_context_manager():
-            loss = self.compute_loss(model, inputs)
-            
+            if return_outputs:
+                outputs = model(**inputs)
+                loss = outputs.loss
+            else:
+                loss = self.compute_loss(model, inputs)
+        
         if self.args.gradient_accumulation_steps > 1:
             loss = loss / self.args.gradient_accumulation_steps
-            
+        
         loss.backward()
         
         if return_outputs:
-            with torch.no_grad():
-                outputs = model(**inputs)
-            return (loss.detach(), outputs)
+            return loss.detach(), outputs
         return loss.detach()
 
     def compute_metrics(self, eval_preds):

@@ -38,3 +38,11 @@ generation:
   top_p: 0.9
   top_k: 50
   do_sample: true
+
+# Few-shot 설정
+prompt:
+  mode: "few-shot"  # "zero-shot" 또는 "few-shot"
+  n_samples: 1      # 사용할 예제 수
+  selection:
+    method: "random"  # 예제 선택 방법
+    seed: ${general.seed} 
