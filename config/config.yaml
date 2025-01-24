@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - model: kobart
+  - model: t5
   - train: train
 
 debug:
@@ -80,6 +80,7 @@ prompt:
     Following the instructions below...
 
 inference:
+  enabled: true
   batch_size: 32
   ckt_path: "${general.output_path}/checkpoint-500"
   no_repeat_ngram_size: 3

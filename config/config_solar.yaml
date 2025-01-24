@@ -80,6 +80,7 @@ prompt:
     Following the instructions below...
 
 inference:
+  enabled: false
   batch_size: 32
   ckt_path: "${general.output_path}/checkpoint-500"
   no_repeat_ngram_size: 3
@@ -108,7 +109,8 @@ huggingface:
   cache_dir: ${general.model_cache_dir}
 
 custom_config:
-  few_shot: true
+  inference: false
+  few_shot: false
   n_few_shot_samples: 1
   few_shot_selection: "baseline"
   n_val_samples: 100

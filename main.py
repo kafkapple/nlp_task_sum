@@ -151,7 +151,7 @@ def main(cfg: DictConfig):
             # Training arguments 설정
             training_args = Seq2SeqTrainingArguments(
                 output_dir=str(output_dir),
-                run_name=f"{cfg.model.name}_{cfg.model.mode}_{cfg.general.timestamp}",
+                run_name=f"{cfg.model.name.split('/')[-1]}_{cfg.model.mode}_{cfg.general.timestamp}",
                 
                 # 학습 설정
                 learning_rate=train_config['learning_rate'],
@@ -191,7 +191,7 @@ def main(cfg: DictConfig):
                 logging_first_step=train_config['logging_first_step'],
                 
                 # wandb 관련 설정
-                report_to="none",  # wandb 로깅을 직접 처리하므로 HF의 기본 로깅은 비활성화
+                report_to=["wandb"],  # "none" -> ["wandb"]로 변경
                 
                 # accelerator 관련 설정
                 ddp_find_unused_parameters=False,
@@ -218,19 +218,39 @@ def main(cfg: DictConfig):
             )
             
             trainer.train()
+            
+            # 학습 완료 후 샘플 생성
+            if not cfg.debug.enabled:
+                print("\n=== Generating Sample Prediction ===")
+                sample_input = val_dataset[0]['input_ids'].unsqueeze(0).to(model.device)
+                sample_output = model.generate(
+                    sample_input,
+                    max_new_tokens=cfg.model.generation.max_new_tokens,
+                    num_beams=cfg.model.generation.num_beams
+                )
+                
+                print(f"\nSample Input:\n{model.tokenizer.decode(sample_input[0], skip_special_tokens=True)}")
+                print(f"\nGenerated Summary:\n{model.tokenizer.decode(sample_output[0], skip_special_tokens=True)}")
+                print(f"\nGold Summary:\n{model.tokenizer.decode(val_dataset[0]['labels'], skip_special_tokens=True)}")
+                print("\n" + "="*100)
         
     except Exception as e:
         print(f"Error in training: {str(e)}")
-        # if wandb.run is not None:
-        #     wandb.finish()
-        # raise
+        if wandb.run is not None:
+            wandb.finish(exit_code=1)
+        raise
         
     finally:
-        inference = DialogueInference(cfg)
-        inference.inference(cfg.general.data_path)
-        # 프로그램 종료 시 wandb 정리
+        if not cfg.debug.enabled and wandb.run is not None and wandb.run.status != "failed":
+            inference = DialogueInference(cfg)
+            inference.inference(cfg.general.data_path)
+        
+        # wandb 정리
         if wandb.run is not None:
-            wandb.finish()
+            if wandb.run.status != "failed":
+                wandb.finish()
+            else:
+                wandb.finish(exit_code=1)  # 실패 상태로 종료
 
 if __name__ == "__main__":
     main() 

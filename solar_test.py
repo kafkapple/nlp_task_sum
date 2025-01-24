@@ -350,7 +350,7 @@ def eda(df):
         print("data has no fname column")
     
 
-@hydra.main(version_base="1.3", config_path="config", config_name="config")
+@hydra.main(version_base="1.3", config_path="config", config_name="config_solar")
 def main(cfg: DictConfig):
     UPSTAGE_API_KEY = os.getenv("UPSTAGE_API_KEY")
     DATA_PATH = cfg.general.data_path
@@ -402,7 +402,10 @@ def main(cfg: DictConfig):
     print(scores)
     log_rouge(scores)
 
-    output = inference(cfg,client,test_df,sample_dialogue,sample_summary)
+    if cfg.inference.enabled:
+        print("======= Inference Start... ========")
+        _ = inference(cfg,client,test_df,sample_dialogue,sample_summary)
+    
     wandb.finish()
 
 if __name__ == "__main__":

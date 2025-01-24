@@ -6,6 +6,8 @@ import numpy as np
 from pathlib import Path
 import os
 import torch.nn as nn
+from rouge import Rouge
+import pandas as pd
 
 class WandBCallback(TrainerCallback):
     """WandB 로깅을 위한 콜백"""
@@ -15,9 +17,16 @@ class WandBCallback(TrainerCallback):
     def setup(self, args, state, model):
         """초기 설정"""
         if not self._initialized and state.is_world_process_zero:
+            # 메트릭 정의
             wandb.define_metric("train/global_step")
             wandb.define_metric("train/*", step_metric="train/global_step")
             wandb.define_metric("eval/*", step_metric="train/global_step")
+            # 새로운 메트릭 정의
+            wandb.define_metric("train/loss", summary="min")
+            wandb.define_metric("train/learning_rate", summary="last")
+            wandb.define_metric("eval/loss", summary="min")
+            wandb.define_metric("train/rouge*", summary="max")
+            wandb.define_metric("eval/rouge*", summary="max")
             self._initialized = True
     
     def on_train_begin(self, args, state, control, **kwargs):
@@ -27,15 +36,14 @@ class WandBCallback(TrainerCallback):
     def on_log(self, args, state, control, logs=None, **kwargs):
         """로그 이벤트 처리"""
         if state.is_world_process_zero and logs:
-            # train/ 접두사 추가
             logged_logs = {}
             for k, v in logs.items():
                 if k == "epoch":
                     logged_logs[k] = v
                 elif k == "loss":
-                    logged_logs["train/loss"] = v
+                    logged_logs["train/loss"] = v  # 학습 손실
                 elif k == "learning_rate":
-                    logged_logs["train/learning_rate"] = v
+                    logged_logs["train/learning_rate"] = v  # 학습률
                 elif not k.startswith(("train/", "eval/")):
                     logged_logs[f"train/{k}"] = v
                 else:
@@ -66,45 +74,88 @@ class CustomTrainer(Trainer):
         if 'tokenizer' in kwargs:
             kwargs['processing_class'] = kwargs.pop('tokenizer')
         super().__init__(*args, **kwargs)
-        self._wandb_initialized = False
+        self.tokenizer = kwargs.get('processing_class')
 
-    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], return_loss=True, return_outputs=False):
-        """학습 스텝 최적화"""
-        model.train()
-        inputs = self._prepare_inputs(inputs)
+    def training_step(self, model, inputs, return_outputs: bool = False):
+        outputs = super().training_step(model, inputs, return_outputs)
         
-        with self.compute_loss_context_manager():
-            if return_outputs:
-                outputs = model(**inputs)
-                loss = outputs.loss
-            else:
-                loss = self.compute_loss(model, inputs)
+        # loss 로깅
+        if self.is_world_process_zero() and wandb.run is not None:
+            try:
+                loss = outputs[0] if isinstance(outputs, tuple) else outputs
+                wandb.log({
+                    "train/loss": loss.item(),
+                    "train/learning_rate": self.optimizer.param_groups[0]['lr'],
+                }, step=self.state.global_step)
+            except Exception as e:
+                print(f"Warning: Failed to log metrics: {e}")
         
-        if self.args.gradient_accumulation_steps > 1:
-            loss = loss / self.args.gradient_accumulation_steps
+        return outputs
+
+    def evaluation_step(self, model, inputs, prediction_loss_only=None):
+        outputs = super().evaluation_step(model, inputs, prediction_loss_only)
         
-        loss.backward()
+        # 평가 결과 로깅
+        if self.is_world_process_zero() and wandb.run is not None:
+            try:
+                wandb.log({
+                    "eval/loss": outputs.loss.item(),
+                }, step=self.state.global_step)
+            except Exception as e:
+                print(f"Warning: Failed to log eval metrics: {e}")
         
-        if return_outputs:
-            return loss.detach(), outputs
-        return loss.detach()
+        return outputs
+
+    def compute_rouge_scores(self, preds, labels):
+        """ROUGE 점수 계산"""
+        rouge = Rouge()
+        scores = rouge.get_scores(preds, labels, avg=True)
+        return scores
 
     def compute_metrics(self, eval_preds):
-        """메트릭 계산"""
+        """메트릭 계산 및 로깅"""
         if not hasattr(self, "compute_metrics_fn"):
             return {}
             
         metrics = self.compute_metrics_fn(eval_preds)
         
-        # eval/ 접두사 추가
-        metrics = {
-            f"eval/{k}" if not k.startswith('eval/') else k: v 
-            for k, v in metrics.items()
-        }
+        # 예측 결과 디코딩
+        predictions = self.tokenizer.batch_decode(
+            eval_preds.predictions, skip_special_tokens=True
+        )
+        references = self.tokenizer.batch_decode(
+            eval_preds.label_ids, skip_special_tokens=True
+        )
         
-        # wandb에 직접 로깅
+        # 예측 결과 저장
+        eval_step = f"step_{self.state.global_step}"
+        save_dir = Path(self.args.output_dir) / "eval_results" / eval_step
+        save_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 결과를 DataFrame으로 변환
+        results_df = pd.DataFrame({
+            "prediction": predictions,
+            "reference": references,
+            "rouge1": metrics.get("rouge1_f1", [0] * len(predictions)),
+            "rouge2": metrics.get("rouge2_f1", [0] * len(predictions)),
+            "rougeL": metrics.get("rougeL_f1", [0] * len(predictions))
+        })
+        
+        # CSV 파일로 저장
+        save_path = save_dir / "predictions.csv"
+        results_df.to_csv(save_path, index=False)
+        print(f"\nSaved predictions to: {save_path}")
+        
+        # WandB 테이블 로깅
         if self.is_world_process_zero() and wandb.run is not None:
-            wandb.log(metrics, step=self.state.global_step)
+            try:
+                table = wandb.Table(dataframe=results_df)
+                wandb.log({
+                    f"eval/predictions_table_{eval_step}": table,
+                    **{f"eval/{k}": v for k, v in metrics.items()}
+                }, step=self.state.global_step)
+            except Exception as e:
+                print(f"Warning: Failed to log predictions table: {e}")
         
         return metrics
 
