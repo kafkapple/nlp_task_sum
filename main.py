@@ -181,8 +181,8 @@ def main(cfg: DictConfig):
                 
                 # 생성 설정
                 predict_with_generate=train_config['predict_with_generate'],
+                generation_max_length=cfg.model.generation.max_new_tokens,  # max_new_tokens 대신 generation_max_length 사용
                 generation_num_beams=cfg.model.generation.num_beams,
-                max_new_tokens=cfg.model.generation.max_new_tokens,
                 
                 # 로깅
                 logging_dir=str(output_dir / "logs"),

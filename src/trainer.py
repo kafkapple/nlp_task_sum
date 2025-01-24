@@ -164,9 +164,9 @@ class CustomTrainer(Trainer):
         has_labels = all(inputs.get(k) is not None for k in self.label_names)
         inputs = self._prepare_inputs(inputs)
         
-        # 생성 설정 - max_length 대신 max_new_tokens 사용
+        # 생성 설정
         gen_kwargs = {
-            "max_new_tokens": self.args.generation_max_length,  # max_length 대신 max_new_tokens 사용
+            "max_new_tokens": self.args.generation_max_length,  # generation_max_length를 max_new_tokens로 사용
             "num_beams": self.args.generation_num_beams,
             "synced_gpus": True if os.getenv("ACCELERATE_TORCH_DISTRIBUTED_DEBUG") else False,
         }
