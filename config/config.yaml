@@ -5,7 +5,7 @@ defaults:
 
 debug:
   enabled: true
-  train_samples: 10
+  train_samples: 5
   val_samples: 2
 prompt_templates:
   "1":
@@ -93,7 +93,11 @@ inference:
     - <s>
     - </s>
     - <pad>
-
+data:
+  split_strategy: "stratified"
+  split_ratio: 0.2
+  train: "train"
+  val: "dev"
 url:
   data: "https://aistages-api-public-prod.s3.amazonaws.com/app/Competitions/000342/data/data.tar.gz"
   code: "https://aistages-api-public-prod.s3.amazonaws.com/app/Competitions/000342/data/code.tar.gz"
@@ -112,7 +116,6 @@ lora:
   alpha: 32
   dropout: 0.1
   target_modules: ["q_proj", "v_proj"]
-
 
 custom_config:
   few_shot: true

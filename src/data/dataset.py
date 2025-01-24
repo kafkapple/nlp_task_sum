@@ -4,12 +4,9 @@ import requests
 import tarfile
 import torch
 import pandas as pd
-from typing import Optional, Tuple, Dict, Any
-from datasets import Dataset as HFDataset
-import logging
+from typing import Optional, Dict
 from tqdm import tqdm
-import random
-import numpy as np
+from abc import ABC, abstractmethod
 
 def download_and_extract(url: str, data_path: str):
     """데이터 다운로드 및 압축 해제"""
@@ -58,31 +55,45 @@ def download_and_extract(url: str, data_path: str):
         if zip_path.exists():
             os.remove(zip_path)
 
-class DialogueDataset:
-    """대화 요약 데이터셋 클래스"""
+
+class BaseDataset(ABC):
+    """기본 데이터셋 클래스"""
     
     def __init__(self, encoder_input: Dict[str, torch.Tensor], 
-                 labels: Optional[Dict[str, torch.Tensor]] = None,
-                 tokenizer = None):
+                 labels: Optional[Dict[str, torch.Tensor]] = None):
         self.encoder_input = encoder_input
         self.labels = labels
-        self.tokenizer = tokenizer
         
     def __len__(self):
         return len(self.encoder_input['input_ids'])
         
+    @abstractmethod
     def __getitem__(self, idx):
-        # 기본 입력
+        pass
+
+
+class DialogueDataset(BaseDataset):
+    """대화 요약 데이터셋 클래스"""
+    
+    def __getitem__(self, idx):
         item = {k: v[idx] for k, v in self.encoder_input.items()}
-        
-        # labels가 있는 경우 추가
         if self.labels is not None:
             item['labels'] = self.labels['labels'][idx]
         else:
-            # labels가 없는 경우 -100으로 채움
             item['labels'] = torch.full_like(item['input_ids'], -100)
-            
         return item
+
+
+class T5Dataset(BaseDataset):
+    """T5 모델용 데이터셋"""
+    
+    def __getitem__(self, idx):
+        item = {k: v[idx] for k, v in self.encoder_input.items()}
+        if self.labels is not None:
+            item['labels'] = self.labels['labels'][idx]
+            # T5 specific processing if needed
+        return item
+
 
 class DataProcessor:
     """데이터 처리 및 데이터셋 생성 클래스"""
@@ -90,115 +101,130 @@ class DataProcessor:
     def __init__(self, tokenizer=None, config=None, data_path=None):
         self.tokenizer = tokenizer
         self.config = config
-        self.data_path = Path(data_path) if data_path is not None else None
+        self.data_path = Path(data_path) if data_path else None
+        self.model_type = config.model_type if config and hasattr(config, 'model_type') else 'bart'
     
     def load_data(self):
-        """CSV 파일들을 데이터프레임으로 로드
-        
-        Returns:
-            tuple: (train_df, val_df, test_df) 형태의 데이터프레임 튜플
-        
-        Raises:
-            ValueError: data_path가 None이거나 필요한 CSV 파일이 없는 경우
-        """
-        if self.data_path is None:
+        """CSV 파일들을 데이터프레임으로 로드"""
+        if not self.data_path:
             raise ValueError("data_path must be specified")
             
-        # 필요한 파일들이 있는지 확인
         required_files = ["train.csv", "dev.csv", "test.csv"]
         for file in required_files:
             if not (self.data_path / file).exists():
                 raise ValueError(f"Required file {file} not found in {self.data_path}")
         
-        train_df = pd.read_csv(self.data_path / "train.csv")
-        val_df = pd.read_csv(self.data_path / "dev.csv")
-        test_df = pd.read_csv(self.data_path / "test.csv")
+        data = {
+            'train': pd.read_csv(self.data_path / "train.csv"),
+            'dev': pd.read_csv(self.data_path / "dev.csv"),
+            'test': pd.read_csv(self.data_path / "test.csv")
+        }
         
-        print(f"\n=== Dataset Statistics ===")
-        print(f"Train set size: {len(train_df)}")
-        print(f"Validation set size: {len(val_df)}")
-        print(f"Test set size: {len(test_df)}")
+        print("\n=== Dataset Statistics ===")
+        for split, df in data.items():
+            print(f"{split.capitalize()} set size: {len(df)}")
         
-        return train_df, val_df, test_df
-        
+        return data['train'], data['dev'], data['test']
+    
     def prepare_dataset(self, split: str):
         """데이터셋 준비"""
-        # 데이터 로드
-        df = pd.read_csv(f"{self.data_path}/{split}.csv")
+        df = pd.read_csv(self.data_path / f"{split}.csv")
+        self._validate_data(df, split)
         
-        # 데이터 검증
+        # 모델 타입에 따른 데이터셋 준비
+        is_train = 'summary' in df.columns
+        if self.model_type == 't5':
+            return self._prepare_t5_dataset(df, is_train)
+        else:  # default to bart
+            return self._prepare_bart_dataset(df, is_train)
+    
+    def _validate_data(self, df: pd.DataFrame, split: str):
+        """데이터 유효성 검증"""
         print(f"\n=== {split} Dataset Info ===")
         print(f"Total samples: {len(df)}")
-        print("\nSample lengths:")
-        print(f"Dialogue min/max/mean length: {df['dialogue'].str.len().min()}/{df['dialogue'].str.len().max()}/{df['dialogue'].str.len().mean():.1f}")
         
-        # train/val 데이터일 경우에만 summary 관련 처리
+        # 길이 통계
+        dialogue_lengths = df['dialogue'].str.len()
+        print("\nDialogue lengths:")
+        print(f"min/max/mean: {dialogue_lengths.min()}/{dialogue_lengths.max()}/{dialogue_lengths.mean():.1f}")
+        
         if 'summary' in df.columns:
-            # 빈 summary 체크 및 처리
             empty_summaries = df['summary'].isna().sum()
             if empty_summaries > 0:
-                print(f"Warning: Found {empty_summaries} empty summaries in {split} set")
-                df = df.dropna(subset=['summary'])
-            print(f"Summary min/max/mean length: {df['summary'].str.len().min()}/{df['summary'].str.len().max()}/{df['summary'].str.len().mean():.1f}")
-        
-        # BART 모델용 데이터셋 준비
-        return self._prepare_bart_dataset(df, is_train='summary' in df.columns)
-        
+                print(f"Warning: Found {empty_summaries} empty summaries")
+                df.dropna(subset=['summary'], inplace=True)
+            
+            summary_lengths = df['summary'].str.len()
+            print("\nSummary lengths:")
+            print(f"min/max/mean: {summary_lengths.min()}/{summary_lengths.max()}/{summary_lengths.mean():.1f}")
+    
     def _prepare_bart_dataset(self, df: pd.DataFrame, is_train: bool) -> DialogueDataset:
-        """Bart 모델용 데이터셋 준비"""
-        # 1. 입력 데이터 준비
-        encoder_input = self.tokenizer(
+        """BART 모델용 데이터셋 준비"""
+        encoder_input = self._tokenize_text(
             df['dialogue'].tolist(),
-            max_length=self.config.encoder_max_len,
-            padding='max_length',
-            truncation=True,
-            return_tensors='pt'
+            max_length=self.config.encoder_max_len
         )
         
-        # attention_mask가 3차원이면 2차원으로 변환
-        if len(encoder_input['attention_mask'].shape) > 2:
-            encoder_input['attention_mask'] = encoder_input['attention_mask'].squeeze(0)
-        
-        # 테스트 데이터의 경우 labels 없이 반환
         if not is_train:
-            return DialogueDataset(
-                encoder_input=encoder_input,
-                labels=None
-            )
+            return DialogueDataset(encoder_input=encoder_input)
         
-        # 2. 출력 데이터 준비 (학습 시에만)
-        decoder_input = self.tokenizer(
+        labels = self._tokenize_text(
             df['summary'].tolist(),
-            max_length=self.config.decoder_max_len,
-            padding='max_length',
-            truncation=True,
-            return_tensors='pt'
+            max_length=self.config.decoder_max_len
         )
-        
-        # labels는 decoder input과 동일하지만, padding token을 -100으로 변경
-        labels = decoder_input['input_ids'].clone()
-        labels[labels == self.tokenizer.pad_token_id] = -100
+        labels = self._prepare_labels(labels['input_ids'])
         
         return DialogueDataset(
             encoder_input=encoder_input,
             labels={'labels': labels}
         )
+    
+    def _prepare_t5_dataset(self, df: pd.DataFrame, is_train: bool) -> T5Dataset:
+        """T5 모델용 데이터셋 준비"""
+        # T5 specific preprocessing if needed
+        encoder_input = self._tokenize_text(
+            df['dialogue'].tolist(),
+            max_length=self.config.encoder_max_len
+        )
+        
+        if not is_train:
+            return T5Dataset(encoder_input=encoder_input)
+        
+        labels = self._tokenize_text(
+            df['summary'].tolist(),
+            max_length=self.config.decoder_max_len
+        )
+        labels = self._prepare_labels(labels['input_ids'])
+        
+        return T5Dataset(
+            encoder_input=encoder_input,
+            labels={'labels': labels}
+        )
+    
+    def _tokenize_text(self, texts: list, max_length: int) -> Dict[str, torch.Tensor]:
+        """텍스트 토큰화"""
+        return self.tokenizer(
+            texts,
+            max_length=max_length,
+            padding='max_length',
+            truncation=True,
+            return_tensors='pt'
+        )
+    
+    def _prepare_labels(self, input_ids: torch.Tensor) -> torch.Tensor:
+        """레이블 준비 (패딩 토큰을 -100으로 변환)"""
+        labels = input_ids.clone()
+        labels[labels == self.tokenizer.pad_token_id] = -100
+        return labels
+
 
 def load_dataset(data_path: str, split: str = None):
-    """데이터셋 로드
-    
-    Args:
-        data_path: 데이터 경로
-        split: 'train', 'dev', 'test' 중 하나. None이면 모든 데이터셋 반환
-    
-    Returns:
-        split이 None이면 (train_df, val_df, test_df) 튜플 반환
-        split이 지정되면 해당하는 단일 데이터프레임 반환
-    """
-    processor = DataProcessor(tokenizer=None, config=None, data_path=data_path)
+    """데이터셋 로드 유틸리티 함수"""
+    processor = DataProcessor(data_path=data_path)
     train_df, val_df, test_df = processor.load_data()
     
     if split is None:
         return train_df, val_df, test_df
     
-    return train_df if split == "train" else val_df if split == "dev" else test_df 
+    split_map = {'train': train_df, 'dev': val_df, 'test': test_df}
+    return split_map.get(split) 

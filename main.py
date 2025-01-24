@@ -138,6 +138,7 @@ def main(cfg: DictConfig):
             train_dataset = processor.prepare_dataset("train")
             val_dataset = processor.prepare_dataset("dev")
             if cfg.debug.enabled:
+                cfg.train.training.num_train_epochs = 1
                 train_dataset = torch.utils.data.Subset(
                     train_dataset,
                     range(min(len(train_dataset), cfg.debug.train_samples))
