@@ -69,12 +69,47 @@ class WandBCallback(TrainerCallback):
         if state.is_world_process_zero and wandb.run is not None:
             wandb.finish()
 
+class CustomLoggingCallback(TrainerCallback):
+    """커스텀 로깅 콜백"""
+    def __init__(self, logging_steps=5):
+        self.logging_steps = logging_steps
+        
+    def on_step_end(self, args, state, control, **kwargs):
+        """스텝 단위 로깅 - 기본 메트릭만"""
+        if state.global_step % self.logging_steps == 0:
+            logs = {}
+            # 기본 메트릭만 로깅
+            for key in ['loss', 'learning_rate', 'grad_norm']:
+                if key in state.log_history[-1]:
+                    logs[key] = state.log_history[-1][key]
+            
+            if wandb.run is not None:
+                wandb.log(logs, step=state.global_step)
+            
+            # 콘솔 출력 없음 (디버그 프린트 제거)
+    
+    def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+        """에폭 단위 로깅 - 모든 메트릭"""
+        if metrics:
+            # Rouge 메트릭 등 모든 메트릭 로깅
+            if wandb.run is not None:
+                wandb.log(metrics, step=state.global_step)
+            
+            # 에폭 단위 콘솔 출력
+            print(f"\nEpoch {state.epoch:.2f} 평가:")
+            for key, value in metrics.items():
+                if key.startswith('eval_'):
+                    print(f"{key}: {value:.4f}")
+            print("-" * 50)
+
 class CustomTrainer(Trainer):
     def __init__(self, *args, **kwargs):
         if 'tokenizer' in kwargs:
             kwargs['processing_class'] = kwargs.pop('tokenizer')
         super().__init__(*args, **kwargs)
         self.tokenizer = kwargs.get('processing_class')
+        # 커스텀 콜백 추가
+        self.add_callback(CustomLoggingCallback(logging_steps=self.args.logging_steps))
 
     def training_step(self, model, inputs, return_outputs: bool = False):
         if not hasattr(self, 'optimizer_scheduler_debug_printed'):

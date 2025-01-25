@@ -31,11 +31,16 @@ training:
   greater_is_better: true
   
   # 로깅 관련 설정
-  logging_strategy: "steps"     # step 단위 로깅
-  logging_steps: 10            # 10 스텝마다 로깅
-  logging_first_step: true     # 첫 스텝부터 로깅
-  logging_dir: "${general.output_path}/logs"
-  report_to: ["wandb", "tensorboard"]  # wandb와 tensorboard 모두 사용
+  logging_strategy: "steps"     
+  logging_steps: 5             # 기본 메트릭 로깅 주기
+  logging_first_step: true
+  
+  # 평가 관련 설정
+  evaluation_strategy: "epoch"  # Rouge 등 메트릭은 epoch 단위로 평가
+  save_strategy: "epoch"
+  
+  # wandb 설정
+  report_to: ["wandb"]
   
   # 생성 관련
   predict_with_generate: true
@@ -45,7 +50,7 @@ training:
 
 # 데이터 전처리 설정 추가
 preprocessing:
-  enabled: true
+  enabled: false
   merge_train_dev: true
   split_ratio: 0.1
   stratify_column: null
@@ -57,3 +62,6 @@ preprocessing:
     ratio: 3     # 비율 구간 수
   random_state: ${general.seed}
   balance_length: true
+
+# 평가 관련 설정
+eval_steps: 500              # steps 단위로 평가할 때 몇 스텝마다 할지
