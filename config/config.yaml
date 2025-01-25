@@ -1,10 +1,10 @@
 defaults:
   - _self_
-  - model: t5
+  - model: kobart
   - train: train
 
 debug:
-  enabled: true
+  enabled: false
   train_samples: 20
   val_samples: 10
 prompt_templates:
