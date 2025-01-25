@@ -116,18 +116,26 @@ def main(cfg: DictConfig):
             )
             
         else:  # finetune 모드
-            # DataProcessor 초기화 시 기본값 설정 추가
-            tokenizer_config = OmegaConf.create({
-                "encoder_max_len": 512,  # 기본값 설정
-                "decoder_max_len": 128,  # 기본값 설정
-                **cfg.model.tokenizer  # 기존 설정 유지
-            })
+            # 토크나이저 기본값을 모델 설정에 병합
+            if 'tokenizer' not in cfg.model:
+                cfg.model.tokenizer = {}
+            
+            default_tokenizer_config = {
+                "encoder_max_len": 512,
+                "decoder_max_len": 128
+            }
+            
+            # 기존 설정을 유지하면서 기본값 추가
+            for k, v in default_tokenizer_config.items():
+                if k not in cfg.model.tokenizer:
+                    cfg.model.tokenizer[k] = v
             
             processor = DataProcessor(
                 tokenizer=model.tokenizer,
-                config=tokenizer_config,  # 수정된 설정 사용
+                config=cfg.model,  # 전체 모델 설정 전달
                 data_path=cfg.general.data_path
             )
+            
             train_dataset = processor.prepare_dataset("train")
             val_dataset = processor.prepare_dataset("dev")
             if cfg.debug.enabled:

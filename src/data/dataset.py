@@ -90,7 +90,6 @@ class DialogueDataset(torch.utils.data.Dataset):
             'labels': self.labels[idx]
         }
         
-        # seq2seq 모델을 위한 decoder_input_ids 추가
         if self.decoder_input_ids is not None:
             item['decoder_input_ids'] = self.decoder_input_ids[idx]
             
@@ -115,13 +114,10 @@ class DataProcessor:
         self.tokenizer = tokenizer
         self.config = config
         self.data_path = Path(data_path)
-        
-        # LLaMA 모델을 위한 특별 처리
         self.is_llama = hasattr(tokenizer, 'name_or_path') and 'llama' in tokenizer.name_or_path.lower()
     
     def prepare_dataset(self, split):
         """데이터셋 준비"""
-        # CSV 파일 직접 로드
         df = pd.read_csv(self.data_path / f"{split}.csv")
         
         if self.is_llama:
@@ -146,7 +142,7 @@ class DataProcessor:
             prompts,
             padding="max_length",
             truncation=True,
-            max_length=self.config.max_length,
+            max_length=self.config.tokenizer.max_length,
             return_tensors="pt"
         )
         
@@ -160,7 +156,7 @@ class DataProcessor:
             if len(summary_tokens) > 1:  # bos/eos 토큰 제외
                 labels[i, :-len(summary_tokens)+1] = -100  # 마지막 eos 토큰 유지
         
-        # 커스텀 데이터셋 반환
+        # 데이터셋 반환
         return DialogueDataset(
             input_ids=tokenized['input_ids'],
             attention_mask=tokenized['attention_mask'],
@@ -178,7 +174,7 @@ class DataProcessor:
             df['dialogue'].tolist(),
             padding="max_length",
             truncation=True,
-            max_length=self.config.encoder_max_len,
+            max_length=self.config.tokenizer.encoder_max_len,
             return_tensors="pt"
         )
         
@@ -188,14 +184,14 @@ class DataProcessor:
                 df['summary'].tolist(),
                 padding="max_length",
                 truncation=True,
-                max_length=self.config.decoder_max_len,
+                max_length=self.config.tokenizer.decoder_max_len,
                 return_tensors="pt"
             )
         
         # 패딩 토큰을 -100으로 변경 (loss 계산에서 제외)
         labels['input_ids'][labels['input_ids'] == self.tokenizer.pad_token_id] = -100
         
-        # 커스텀 데이터셋 반환
+        # 데이터셋 반환
         return DialogueDataset(
             input_ids=encoder_inputs['input_ids'],
             attention_mask=encoder_inputs['attention_mask'],

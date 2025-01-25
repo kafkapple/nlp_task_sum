@@ -247,3 +247,41 @@ class LlamaModel:
                 text = text[:-len(suffix)].strip()
             
         return text.strip() 
+
+    def _prepare_llama_dataset(self, df):
+        """LLaMA 모델용 데이터셋 준비"""
+        # 데이터 유효성 검사
+        if 'dialogue' not in df.columns or 'summary' not in df.columns:
+            raise ValueError("데이터셋에 'dialogue'와 'summary' 컬럼이 필요합니다.")
+        
+        # LLaMA 형식의 프롬프트 생성
+        prompts = [
+            f"### Dialogue:\n{dialogue}\n\n### Summary:\n{summary}"
+            for dialogue, summary in zip(df['dialogue'], df['summary'])
+        ]
+        
+        # 토크나이징
+        tokenized = self.tokenizer(
+            prompts,
+            padding=self.config.model.tokenizer.padding,
+            truncation=self.config.model.tokenizer.truncation,
+            max_length=self.config.model.tokenizer.max_length,
+            return_tensors=self.config.model.tokenizer.return_tensors
+        )
+        
+        # 레이블 생성
+        labels = tokenized['input_ids'].clone()
+        
+        # dialogue 부분을 -100으로 마스킹
+        for i, prompt in enumerate(prompts):
+            summary_start = prompt.find("### Summary:\n") + len("### Summary:\n")
+            summary_tokens = self.tokenizer(prompt[summary_start:]).input_ids
+            if len(summary_tokens) > 1:  # bos/eos 토큰 제외
+                labels[i, :-len(summary_tokens)+1] = -100  # 마지막 eos 토큰 유지
+        
+        # 데이터셋 반환
+        return DialogueDataset(
+            input_ids=tokenized['input_ids'],
+            attention_mask=tokenized['attention_mask'],
+            labels=labels
+        ) 
