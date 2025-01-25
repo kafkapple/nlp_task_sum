@@ -246,9 +246,24 @@ def main(cfg: DictConfig):
                     top_k=cfg.model.generation.top_k
                 )
                 
-                print(f"\nSample Input:\n{model.tokenizer.decode(sample_input[0], skip_special_tokens=True)}")
-                print(f"\nGenerated Summary:\n{model.tokenizer.decode(sample_output[0], skip_special_tokens=True)}")
-                print(f"\nGold Summary:\n{model.tokenizer.decode(val_dataset[0]['labels'], skip_special_tokens=True)}")
+                # 입력 디코딩
+                input_ids = sample_input[0].cpu().numpy()
+                print(f"\nSample Input:\n{model.tokenizer.decode(input_ids, skip_special_tokens=True)}")
+                
+                # 출력 디코딩
+                output_ids = sample_output[0].cpu().numpy()
+                print(f"\nGenerated Summary:\n{model.tokenizer.decode(output_ids, skip_special_tokens=True)}")
+                
+                # 레이블 디코딩
+                try:
+                    labels = val_dataset[0]['labels'].cpu().numpy()
+                    valid_labels = labels[labels != -100]  # -100 값 제외
+                    print(f"\nGold Summary:\n{model.tokenizer.decode(valid_labels, skip_special_tokens=True)}")
+                except Exception as e:
+                    print(f"\nWarning: Failed to decode labels: {e}")
+                    print("Labels:", labels)
+                    print("Valid labels:", valid_labels)
+                
                 print("\n" + "="*100)
         
     except Exception as e:
