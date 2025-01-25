@@ -1,10 +1,10 @@
 defaults:
   - _self_
-  - model: t5
+  - model: bllossom
   - train: train
 
 debug:
-  enabled: false
+  enabled: true
   train_samples: 5
   val_samples: 2
 prompt_templates:
@@ -128,3 +128,17 @@ common:
     - "#CardNumber#"
     - "#CarNumber#"
     - "#Email#" 
+
+
+custom_config:
+  inference: false
+  few_shot: false
+  n_few_shot_samples: 1
+  few_shot_selection: "baseline"
+  n_val_samples: 100
+  temperature: 0.3
+  max_new_tokens: 150
+  top_p: 0.8
+  top_k: 50
+  do_sample: true
+  stop_sequences: ["###", "대화", "Summary:", "Dialogue:"]

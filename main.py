@@ -227,10 +227,20 @@ def main(cfg: DictConfig):
             if not cfg.debug.enabled:
                 print("\n=== Generating Sample Prediction ===")
                 sample_input = val_dataset[0]['input_ids'].unsqueeze(0).to(model.device)
-                sample_output = model.generate(
+                
+                # model.model을 사용하여 generate 호출
+                sample_output = model.model.generate(
                     sample_input,
                     max_new_tokens=cfg.model.generation.max_new_tokens,
-                    num_beams=cfg.model.generation.num_beams
+                    num_beams=cfg.model.generation.num_beams,
+                    length_penalty=cfg.model.generation.length_penalty,
+                    repetition_penalty=cfg.model.generation.repetition_penalty,
+                    no_repeat_ngram_size=cfg.model.generation.no_repeat_ngram_size,
+                    early_stopping=cfg.model.generation.early_stopping,
+                    do_sample=cfg.model.generation.do_sample,
+                    temperature=cfg.model.generation.temperature,
+                    top_p=cfg.model.generation.top_p,
+                    top_k=cfg.model.generation.top_k
                 )
                 
                 print(f"\nSample Input:\n{model.tokenizer.decode(sample_input[0], skip_special_tokens=True)}")
