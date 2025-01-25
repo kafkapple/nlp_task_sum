@@ -68,10 +68,16 @@ def main(cfg: DictConfig):
             print(f"데이터 로드 완료 (train: {len(train_df)}, val: {len(val_df)}, test: {len(test_df)})")
             
             # Few-shot 예제 선택 로직
+            sample_dialogue = None
+            sample_summary = None
             if cfg.custom_config.few_shot:
                 examples = FewShotSelector.select_examples(train_df, cfg)
                 sample_dialogue = examples["dialogue"]
                 sample_summary = examples["summary"]
+            else:
+                # few-shot이 아닌 경우 기본 예제 사용
+                sample_dialogue = train_df.iloc[0]['dialogue']
+                sample_summary = train_df.iloc[0]['summary']
             
             # Initialize metrics
             metrics = Metrics(config=cfg)
