@@ -1,7 +1,7 @@
 # 기본 학습 설정
 training:
   # 기본 학습 설정
-  num_train_epochs: 10
+  num_train_epochs: 3
   learning_rate: 2e-5
   warmup_ratio: 0.1
   weight_decay: 0.01

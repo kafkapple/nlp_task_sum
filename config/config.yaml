@@ -1,7 +1,7 @@
 defaults:
   - _self_
-  - model: t5
-  - train: train
+  - model: llama
+  - train: llama
 
 debug:
   enabled: false

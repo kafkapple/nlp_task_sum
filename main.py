@@ -235,42 +235,56 @@ def main(cfg: DictConfig):
             # 학습 완료 후 샘플 생성
             if not cfg.debug.enabled:
                 print("\n=== Generating Sample Prediction ===")
-                sample_input = val_dataset[0]['input_ids'].unsqueeze(0).to(model.device)
-                
-                # model.model을 사용하여 generate 호출
-                sample_output = model.model.generate(
-                    sample_input,
-                    max_new_tokens=cfg.model.generation.max_new_tokens,
-                    num_beams=cfg.model.generation.num_beams,
-                    length_penalty=cfg.model.generation.length_penalty,
-                    repetition_penalty=cfg.model.generation.repetition_penalty,
-                    no_repeat_ngram_size=cfg.model.generation.no_repeat_ngram_size,
-                    early_stopping=cfg.model.generation.early_stopping,
-                    do_sample=cfg.model.generation.do_sample,
-                    temperature=cfg.model.generation.temperature,
-                    top_p=cfg.model.generation.top_p,
-                    top_k=cfg.model.generation.top_k
-                )
-                
-                # 입력 디코딩
-                input_ids = sample_input[0].cpu().numpy()
-                print(f"\nSample Input:\n{model.tokenizer.decode(input_ids, skip_special_tokens=True)}")
-                
-                # 출력 디코딩
-                output_ids = sample_output[0].cpu().numpy()
-                print(f"\nGenerated Summary:\n{model.tokenizer.decode(output_ids, skip_special_tokens=True)}")
-                
-                # 레이블 디코딩
                 try:
-                    labels = val_dataset[0]['labels'].cpu().numpy()
-                    valid_labels = labels[labels != -100]  # -100 값 제외
-                    print(f"\nGold Summary:\n{model.tokenizer.decode(valid_labels, skip_special_tokens=True)}")
+                    # 입력 준비
+                    sample_input = val_dataset[0]['input_ids'].unsqueeze(0).to(model.device)
+                    
+                    # 생성
+                    sample_output = model.model.generate(
+                        sample_input,
+                        max_new_tokens=cfg.model.generation.max_new_tokens,
+                        num_beams=cfg.model.generation.num_beams,
+                        length_penalty=cfg.model.generation.length_penalty,
+                        repetition_penalty=cfg.model.generation.repetition_penalty,
+                        no_repeat_ngram_size=cfg.model.generation.no_repeat_ngram_size,
+                        early_stopping=cfg.model.generation.early_stopping,
+                        do_sample=cfg.model.generation.do_sample,
+                        temperature=cfg.model.generation.temperature,
+                        top_p=cfg.model.generation.top_p,
+                        top_k=cfg.model.generation.top_k
+                    )
+                    
+                    # 입력 디코딩
+                    try:
+                        input_ids = sample_input[0].cpu().numpy().tolist()  # numpy 배열을 리스트로 변환
+                        print(f"\nSample Input:\n{model.tokenizer.decode(input_ids, skip_special_tokens=True)}")
+                    except Exception as e:
+                        print(f"\nWarning: Failed to decode input: {e}")
+                    
+                    # 출력 디코딩
+                    try:
+                        output_ids = sample_output[0].cpu().numpy().tolist()  # numpy 배열을 리스트로 변환
+                        print(f"\nGenerated Summary:\n{model.tokenizer.decode(output_ids, skip_special_tokens=True)}")
+                    except Exception as e:
+                        print(f"\nWarning: Failed to decode output: {e}")
+                    
+                    # 레이블 디코딩
+                    try:
+                        labels = val_dataset[0]['labels'].cpu().numpy()
+                        valid_labels = labels[labels != -100].tolist()  # -100 값 제외하고 리스트로 변환
+                        if valid_labels:  # 유효한 레이블이 있는 경우에만 디코딩
+                            print(f"\nGold Summary:\n{model.tokenizer.decode(valid_labels, skip_special_tokens=True)}")
+                        else:
+                            print("\nWarning: No valid labels found")
+                    except Exception as e:
+                        print(f"\nWarning: Failed to decode labels: {e}")
+                        print("Labels shape:", labels.shape if hasattr(labels, 'shape') else 'unknown')
+                        print("Valid labels:", valid_labels if 'valid_labels' in locals() else 'not created')
+                    
+                    print("\n" + "="*100)
+                    
                 except Exception as e:
-                    print(f"\nWarning: Failed to decode labels: {e}")
-                    print("Labels:", labels)
-                    print("Valid labels:", valid_labels)
-                
-                print("\n" + "="*100)
+                    print(f"\nError generating sample: {e}")
         
     except Exception as e:
         print(f"Error in training: {str(e)}")

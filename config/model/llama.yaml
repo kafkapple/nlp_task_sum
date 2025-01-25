@@ -1,12 +1,22 @@
 name: "lwef/llama3-8B-ko-dialogue-summary-finetuned"
 family: "llama"
-mode: "prompt"
+mode: "finetune"
+
+# 모델 특화 설정
+trust_remote_code: true
+torch_dtype: "float16"
+device_map: "auto"
 
 # 토크나이저 설정
 tokenizer:
-  max_length: 2048
+  max_length: 512
   padding_side: "left"
   truncation_side: "left"
+  padding: "max_length"
+  truncation: true
+  return_tensors: "pt"
+  encoder_max_len: 256
+  decoder_max_len: 128
 
 # 모델 설정
 model:
@@ -16,14 +26,17 @@ model:
 
 # 생성 설정
 generation:
-  max_new_tokens: 32
-  min_length: 10
-  temperature: 0.3
-  top_p: 0.9
-  repetition_penalty: 1.2
-  no_repeat_ngram_size: 3
   num_beams: 5
-  length_penalty: 1.0
+  max_new_tokens: 200
+  min_new_tokens: 50
+  length_penalty: 0.8
+  repetition_penalty: 2.0
+  no_repeat_ngram_size: 3
+  early_stopping: true
+  temperature: 0.7
+  top_p: 0.9
+  top_k: 50
+  do_sample: true
   stop_sequences: [
     "###", "대화", "Summary:", "Dialogue:", 
     "아래 대화를", "다음 대화를", "#",
@@ -36,16 +49,22 @@ generation:
     "It", "They", "We", "You", "He", "She",
     "instruction", "template", "prompt"
   ]
-
 # 양자화 설정
 quantization:
   enabled: true
   precision: "int4"
   compute_dtype: "float16"
+  double_quant: true
+  quant_type: "nf4"
 
-# LoRA 설정
 lora:
-  r: 8
-  alpha: 32
+  enabled: true
+  r: 4
+  alpha: 16
   dropout: 0.1
-  target_modules: ["q_proj", "v_proj"] 
+  target_modules: "q_proj,v_proj"
+  task_type: "CAUSAL_LM"
+  bias: "none"
+  modules_to_save: null
+  fan_in_fan_out: false
+  inference_mode: false
