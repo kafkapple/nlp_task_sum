@@ -5,8 +5,8 @@ defaults:
 
 debug:
   enabled: true
-  train_samples: 5
-  val_samples: 2
+  train_samples: 20
+  val_samples: 10
 prompt_templates:
   "1":
     system: |

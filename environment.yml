@@ -26,3 +26,4 @@ dependencies:
     - datasets>=2.0.0 
     - matplotlib
     - seaborn
+    - scikit-learn

@@ -25,6 +25,7 @@ from src.utils.metrics import Metrics, TrainerMetrics
 from src.trainer import CustomTrainer, WandBCallback
 from src.inference import DialogueInference
 from src.utils.few_shot_selector import FewShotSelector
+from src.data.data_preprocessor import DataPreprocessor
 
 @hydra.main(version_base="1.2", config_path="config", config_name="config")
 def main(cfg: DictConfig):
@@ -76,7 +77,7 @@ def main(cfg: DictConfig):
             metrics = Metrics(config=cfg)
             
             print(f"\nTesting prompt version {cfg.prompt.version}")
-            # 검증 데이터 요약 생성 (한 번만 실행)
+            # 검증 데이터 요약 생성
             print("검증 데이터 요약 생성 중...")
             val_predictions = model.batch_summarize(
                 val_df['dialogue'].tolist()[:cfg.prompt.n_samples],
@@ -107,7 +108,7 @@ def main(cfg: DictConfig):
                     test_df['fname'].tolist(),
                     output_dir / "prediction_prompt.csv"
                 )
-                
+            
             # 샘플 출력
             print_samples(
                 val_df['dialogue'].tolist()[:cfg.prompt.n_samples],
@@ -116,28 +117,20 @@ def main(cfg: DictConfig):
             )
             
         else:  # finetune 모드
-            # 토크나이저 기본값을 모델 설정에 병합
-            if 'tokenizer' not in cfg.model:
-                cfg.model.tokenizer = {}
+            # 데이터 전처리
+            preprocessor = DataPreprocessor(cfg)
+            data_dir = preprocessor.prepare_data()  # 전처리된 데이터 또는 원본 데이터 경로 반환
             
-            default_tokenizer_config = {
-                "encoder_max_len": 512,
-                "decoder_max_len": 128
-            }
-            
-            # 기존 설정을 유지하면서 기본값 추가
-            for k, v in default_tokenizer_config.items():
-                if k not in cfg.model.tokenizer:
-                    cfg.model.tokenizer[k] = v
-            
+            # 데이터셋 준비
             processor = DataProcessor(
                 tokenizer=model.tokenizer,
-                config=cfg.model,  # 전체 모델 설정 전달
-                data_path=cfg.general.data_path
+                config=cfg.model,
+                data_path=data_dir  # 전처리된 데이터 경로 사용
             )
             
             train_dataset = processor.prepare_dataset("train")
-            val_dataset = processor.prepare_dataset("dev")
+            val_dataset = processor.prepare_dataset("validation" if cfg.train.preprocessing.enabled else "dev")
+            
             if cfg.debug.enabled:
                 cfg.train.training.num_train_epochs = 1
                 train_dataset = torch.utils.data.Subset(

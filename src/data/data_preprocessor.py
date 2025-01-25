@@ -1,61 +1,200 @@
 import pandas as pd
+from pathlib import Path
 from sklearn.model_selection import train_test_split
 
-class DataProcessor:
-    def __init__(self):
-        self.data = None
-        self.train_data = None
-        self.val_data = None
+class DataPreprocessor:
+    def __init__(self, config):
+        """
+        Args:
+            config: 전체 설정 객체
+        """
+        self.config = config
+        self.data_path = Path(config.general.data_path)
+        self.preprocessing_config = config.train.preprocessing
+        
+    def _calculate_text_lengths(self, df):
+        """텍스트 길이 계산"""
+        df['dialogue_len'] = df['dialogue'].str.len()
+        df['summary_len'] = df['summary'].str.len()
+        return df
+    
+    def _balance_length_distribution(self, df):
+        """대화/요약 길이 분포 균형 맞추기"""
+        length_strategy = self.preprocessing_config.get('length_strategy', 'dialogue')
+        length_bins = self.preprocessing_config.get('length_bins', {
+            'dialogue': 5,
+            'summary': 5,
+            'ratio': 5
+        })
+        
+        def create_labels(n):
+            """구간 수에 따른 레이블 생성"""
+            return [str(i+1) for i in range(n)]
+        
+        if length_strategy == 'dialogue':
+            # 대화 길이만 사용
+            n_bins = length_bins.get('dialogue', 5)
+            df['length_bin'] = pd.qcut(
+                df['dialogue_len'], 
+                q=n_bins, 
+                labels=create_labels(n_bins)
+            )
+            
+        elif length_strategy == 'summary':
+            # 요약 길이만 사용
+            n_bins = length_bins.get('summary', 5)
+            df['length_bin'] = pd.qcut(
+                df['summary_len'], 
+                q=n_bins, 
+                labels=create_labels(n_bins)
+            )
+            
+        elif length_strategy == 'both':
+            # 대화와 요약 길이 모두 고려
+            d_bins = length_bins.get('dialogue', 3)
+            s_bins = length_bins.get('summary', 3)
+            
+            df['dialogue_bin'] = pd.qcut(
+                df['dialogue_len'], 
+                q=d_bins, 
+                labels=create_labels(d_bins)
+            )
+            df['summary_bin'] = pd.qcut(
+                df['summary_len'], 
+                q=s_bins, 
+                labels=create_labels(s_bins)
+            )
+            df['length_bin'] = df['dialogue_bin'] + '_' + df['summary_bin']
+            df.drop(columns=['dialogue_bin', 'summary_bin'], inplace=True)
+            
+        elif length_strategy == 'ratio':
+            # 요약/대화 길이 비율 사용
+            n_bins = length_bins.get('ratio', 5)
+            df['length_ratio'] = df['summary_len'] / df['dialogue_len']
+            df['length_bin'] = pd.qcut(
+                df['length_ratio'], 
+                q=n_bins, 
+                labels=create_labels(n_bins)
+            )
+            df.drop(columns=['length_ratio'], inplace=True)
+        
+        # 분포 출력
+        print(f"\n=== Length Distribution ({length_strategy}) ===")
+        print(df['length_bin'].value_counts().sort_index())
+        
+        return df
+    
+    def _get_stratify_columns(self, df):
+        """층화 추출을 위한 컬럼 준비"""
+        stratify_cols = []
+        
+        # 설정된 stratify_column이 있으면 추가
+        if self.preprocessing_config.stratify_column:
+            if self.preprocessing_config.stratify_column in df.columns:
+                stratify_cols.append(self.preprocessing_config.stratify_column)
+        
+        # 길이 기반 층화도 사용
+        if self.preprocessing_config.get('stratify_by_length', False):
+            stratify_cols.append('length_bin')
+            
+        # 여러 컬럼으로 층화할 경우 조합
+        if len(stratify_cols) > 1:
+            return df[stratify_cols].apply(lambda x: '_'.join(x.astype(str)), axis=1)
+        elif len(stratify_cols) == 1:
+            return df[stratify_cols[0]]
+        return None
 
-    def load_data(self, train_path: str, dev_path: str):
-        """
-        Load and merge train and dev datasets.
-        """
-        train_df = pd.read_csv(train_path)
-        dev_df = pd.read_csv(dev_path)
-        self.data = pd.concat([train_df, dev_df], ignore_index=True)
-        print("Data loaded successfully. Shape:", self.data.shape)
-
-    def clean_data(self):
-        """
-        Clean the dataset by removing duplicates and handling missing values.
-        """
-        if self.data is None:
-            raise ValueError("Data not loaded. Please load data first using load_data().")
-        # Remove duplicates
-        self.data = self.data.drop_duplicates(subset=['fname', 'dialouge'])
-        # Drop rows with missing values
-        self.data = self.data.dropna()
-        print("Data cleaned. Shape:", self.data.shape)
-
-    def split_data(self, stratify_column: str, test_size: float = 0.2, random_state: int = 42):
-        """
-        Split the dataset into train and validation sets.
-        """
-        if self.data is None:
-            raise ValueError("Data not loaded. Please load and clean data first.")
-        self.train_data, self.val_data = train_test_split(
-            self.data,
-            test_size=test_size,
-            stratify=self.data[stratify_column],
-            random_state=random_state
-        )
-        print(f"Data split into train ({len(self.train_data)}) and validation ({len(self.val_data)}) sets.")
-
-    def save_data(self, train_path: str, val_path: str):
-        """
-        Save train and validation datasets to CSV.
-        """
-        if self.train_data is None or self.val_data is None:
-            raise ValueError("Data not split. Please split data first using split_data().")
-        self.train_data.to_csv(train_path, index=False)
-        self.val_data.to_csv(val_path, index=False)
-        print(f"Train data saved to {train_path}.")
-        print(f"Validation data saved to {val_path}.")
+    def prepare_data(self):
+        """데이터 전처리 및 분할 수행"""
+        if not self.preprocessing_config.enabled:
+            print("데이터 전처리가 비활성화되어 있습니다. 기존 데이터를 사용합니다.")
+            return self.data_path
+            
+        # 데이터 로드 및 병합
+        train_df = pd.read_csv(self.data_path / "train.csv")
+        dev_df = pd.read_csv(self.data_path / "dev.csv")
+        
+        if self.preprocessing_config.merge_train_dev:
+            print("train과 dev 데이터를 병합합니다.")
+            combined_df = pd.concat([train_df, dev_df], ignore_index=True)
+            
+            # 중복 제거
+            combined_df = combined_df.drop_duplicates(subset=['fname', 'dialogue'])
+            combined_df = combined_df.dropna()
+            
+            # 텍스트 길이 계산 및 분포 균형
+            combined_df = self._calculate_text_lengths(combined_df)
+            combined_df = self._balance_length_distribution(combined_df)
+            
+            # 층화 기준 설정
+            stratify = self._get_stratify_columns(combined_df)
+            
+            try:
+                # 데이터 분할
+                train_data, val_data = train_test_split(
+                    combined_df,
+                    test_size=self.preprocessing_config.split_ratio,
+                    stratify=stratify,
+                    random_state=self.preprocessing_config.random_state
+                )
+                
+                # 분할 결과 통계
+                print("\n=== 데이터 분할 통계 ===")
+                print(f"Train 데이터: {len(train_data)}개")
+                print(f"Validation 데이터: {len(val_data)}개")
+                
+                # stratify_column이 있을 때만 해당 통계 출력
+                if self.preprocessing_config.stratify_column:
+                    print("\n클래스별 분포:")
+                    print("Train:", train_data[self.preprocessing_config.stratify_column].value_counts())
+                    print("Val:", val_data[self.preprocessing_config.stratify_column].value_counts())
+                
+                # 길이 기반 층화를 사용할 때는 length_bin 분포 출력
+                if self.preprocessing_config.stratify_by_length:
+                    print("\n길이 구간별 분포:")
+                    print("Train:", train_data['length_bin'].value_counts().sort_index())
+                    print("Val:", val_data['length_bin'].value_counts().sort_index())
+                
+                # 길이 통계
+                print("\n텍스트 길이 통계:")
+                print("Train - 대화 길이:", train_data['dialogue_len'].describe())
+                print("Train - 요약 길이:", train_data['summary_len'].describe())
+                print("Val - 대화 길이:", val_data['dialogue_len'].describe())
+                print("Val - 요약 길이:", val_data['summary_len'].describe())
+                
+                if self.preprocessing_config.length_strategy == 'ratio':
+                    ratio_train = train_data['summary_len'] / train_data['dialogue_len']
+                    ratio_val = val_data['summary_len'] / val_data['dialogue_len']
+                    print("\n요약/대화 길이 비율 통계:")
+                    print("Train - 비율:", ratio_train.describe())
+                    print("Val - 비율:", ratio_val.describe())
+                
+            except ValueError as e:
+                print(f"층화 추출 실패: {e}")
+                print("일반 랜덤 분할로 진행합니다.")
+                train_data, val_data = train_test_split(
+                    combined_df,
+                    test_size=self.preprocessing_config.split_ratio,
+                    stratify=None,
+                    random_state=self.preprocessing_config.random_state
+                )
+            
+            # 전처리 컬럼 제거
+            for df in [train_data, val_data]:
+                df.drop(columns=['dialogue_len', 'summary_len', 'length_bin'], 
+                       errors='ignore', inplace=True)
+            
+            # 저장
+            processed_dir = self.data_path / "processed"
+            processed_dir.mkdir(exist_ok=True)
+            
+            train_data.to_csv(processed_dir / "train.csv", index=False)
+            val_data.to_csv(processed_dir / "validation.csv", index=False)
+            
+            return processed_dir
+        
+        return self.data_path
 
 if __name__ == "__main__":
-    processor = DataProcessor()
-    processor.load_data("data/train.csv", "data/dev.csv")
-    processor.clean_data()
-    processor.split_data("topic")
-    processor.save_data("data/new_train.csv", "data/new_validation.csv")
+    processor = DataPreprocessor()
+    processor.prepare_data()

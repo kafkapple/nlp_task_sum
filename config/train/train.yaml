@@ -42,3 +42,18 @@ training:
   remove_unused_columns: true
   generation_max_length: ${model.generation.max_new_tokens}
   generation_num_beams: ${model.generation.num_beams}
+
+# 데이터 전처리 설정 추가
+preprocessing:
+  enabled: true
+  merge_train_dev: true
+  split_ratio: 0.1
+  stratify_column: null
+  stratify_by_length: true
+  length_strategy: "ratio" #"both"
+  length_bins:
+    dialogue: 3  # 대화 텍스트 구간 수
+    summary: 3   # 요약 텍스트 구간 수
+    ratio: 3     # 비율 구간 수
+  random_state: ${general.seed}
+  balance_length: true
