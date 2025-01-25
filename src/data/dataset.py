@@ -72,15 +72,28 @@ class BaseDataset(ABC):
         pass
 
 
-class DialogueDataset(BaseDataset):
-    """대화 요약 데이터셋 클래스"""
-    
+class DialogueDataset(torch.utils.data.Dataset):
+    """통합 대화 요약 데이터셋"""
+    def __init__(self, input_ids, attention_mask, labels, decoder_input_ids=None):
+        self.input_ids = input_ids
+        self.attention_mask = attention_mask
+        self.labels = labels
+        self.decoder_input_ids = decoder_input_ids
+        
+    def __len__(self):
+        return len(self.input_ids)
+        
     def __getitem__(self, idx):
-        item = {k: v[idx] for k, v in self.encoder_input.items()}
-        if self.labels is not None:
-            item['labels'] = self.labels['labels'][idx]
-        else:
-            item['labels'] = torch.full_like(item['input_ids'], -100)
+        item = {
+            'input_ids': self.input_ids[idx],
+            'attention_mask': self.attention_mask[idx],
+            'labels': self.labels[idx]
+        }
+        
+        # seq2seq 모델을 위한 decoder_input_ids 추가
+        if self.decoder_input_ids is not None:
+            item['decoder_input_ids'] = self.decoder_input_ids[idx]
+            
         return item
 
 
@@ -98,133 +111,109 @@ class T5Dataset(BaseDataset):
 class DataProcessor:
     """데이터 처리 및 데이터셋 생성 클래스"""
     
-    def __init__(self, tokenizer=None, config=None, data_path=None):
+    def __init__(self, tokenizer, config, data_path):
         self.tokenizer = tokenizer
         self.config = config
-        self.data_path = Path(data_path) if data_path else None
-        self.model_type = config.model_type if config and hasattr(config, 'model_type') else 'bart'
+        self.data_path = Path(data_path)
+        
+        # LLaMA 모델을 위한 특별 처리
+        self.is_llama = hasattr(tokenizer, 'name_or_path') and 'llama' in tokenizer.name_or_path.lower()
     
-    def load_data(self):
-        """CSV 파일들을 데이터프레임으로 로드"""
-        if not self.data_path:
-            raise ValueError("data_path must be specified")
-            
-        required_files = ["train.csv", "dev.csv", "test.csv"]
-        for file in required_files:
-            if not (self.data_path / file).exists():
-                raise ValueError(f"Required file {file} not found in {self.data_path}")
-        
-        data = {
-            'train': pd.read_csv(self.data_path / "train.csv"),
-            'dev': pd.read_csv(self.data_path / "dev.csv"),
-            'test': pd.read_csv(self.data_path / "test.csv")
-        }
-        
-        print("\n=== Dataset Statistics ===")
-        for split, df in data.items():
-            print(f"{split.capitalize()} set size: {len(df)}")
-        
-        return data['train'], data['dev'], data['test']
-    
-    def prepare_dataset(self, split: str):
+    def prepare_dataset(self, split):
         """데이터셋 준비"""
+        # CSV 파일 직접 로드
         df = pd.read_csv(self.data_path / f"{split}.csv")
-        self._validate_data(df, split)
         
-        # 모델 타입에 따른 데이터셋 준비
-        is_train = 'summary' in df.columns
-        if self.model_type == 't5':
-            return self._prepare_t5_dataset(df, is_train)
-        else:  # default to bart
-            return self._prepare_bart_dataset(df, is_train)
+        if self.is_llama:
+            return self._prepare_llama_dataset(df)
+        else:
+            return self._prepare_seq2seq_dataset(df)
     
-    def _validate_data(self, df: pd.DataFrame, split: str):
-        """데이터 유효성 검증"""
-        print(f"\n=== {split} Dataset Info ===")
-        print(f"Total samples: {len(df)}")
+    def _prepare_llama_dataset(self, df):
+        """LLaMA 모델용 데이터셋 준비"""
+        # 데이터 유효성 검사
+        if 'dialogue' not in df.columns or 'summary' not in df.columns:
+            raise ValueError("데이터셋에 'dialogue'와 'summary' 컬럼이 필요합니다.")
         
-        # 길이 통계
-        dialogue_lengths = df['dialogue'].str.len()
-        print("\nDialogue lengths:")
-        print(f"min/max/mean: {dialogue_lengths.min()}/{dialogue_lengths.max()}/{dialogue_lengths.mean():.1f}")
+        # LLaMA 형식의 프롬프트 생성
+        prompts = [
+            f"### Dialogue:\n{dialogue}\n\n### Summary:\n{summary}"
+            for dialogue, summary in zip(df['dialogue'], df['summary'])
+        ]
         
-        if 'summary' in df.columns:
-            empty_summaries = df['summary'].isna().sum()
-            if empty_summaries > 0:
-                print(f"Warning: Found {empty_summaries} empty summaries")
-                df.dropna(subset=['summary'], inplace=True)
-            
-            summary_lengths = df['summary'].str.len()
-            print("\nSummary lengths:")
-            print(f"min/max/mean: {summary_lengths.min()}/{summary_lengths.max()}/{summary_lengths.mean():.1f}")
-    
-    def _prepare_bart_dataset(self, df: pd.DataFrame, is_train: bool) -> DialogueDataset:
-        """BART 모델용 데이터셋 준비"""
-        encoder_input = self._tokenize_text(
-            df['dialogue'].tolist(),
-            max_length=self.config.encoder_max_len
-        )
-        
-        if not is_train:
-            return DialogueDataset(encoder_input=encoder_input)
-        
-        labels = self._tokenize_text(
-            df['summary'].tolist(),
-            max_length=self.config.decoder_max_len
-        )
-        labels = self._prepare_labels(labels['input_ids'])
-        
-        return DialogueDataset(
-            encoder_input=encoder_input,
-            labels={'labels': labels}
-        )
-    
-    def _prepare_t5_dataset(self, df: pd.DataFrame, is_train: bool) -> T5Dataset:
-        """T5 모델용 데이터셋 준비"""
-        # T5 specific preprocessing if needed
-        encoder_input = self._tokenize_text(
-            df['dialogue'].tolist(),
-            max_length=self.config.encoder_max_len
-        )
-        
-        if not is_train:
-            return T5Dataset(encoder_input=encoder_input)
-        
-        labels = self._tokenize_text(
-            df['summary'].tolist(),
-            max_length=self.config.decoder_max_len
-        )
-        labels = self._prepare_labels(labels['input_ids'])
-        
-        return T5Dataset(
-            encoder_input=encoder_input,
-            labels={'labels': labels}
-        )
-    
-    def _tokenize_text(self, texts: list, max_length: int) -> Dict[str, torch.Tensor]:
-        """텍스트 토큰화"""
-        return self.tokenizer(
-            texts,
-            max_length=max_length,
-            padding='max_length',
+        # 토크나이징
+        tokenized = self.tokenizer(
+            prompts,
+            padding="max_length",
             truncation=True,
-            return_tensors='pt'
+            max_length=self.config.max_length,
+            return_tensors="pt"
+        )
+        
+        # 레이블 생성
+        labels = tokenized['input_ids'].clone()
+        
+        # dialogue 부분을 -100으로 마스킹
+        for i, prompt in enumerate(prompts):
+            summary_start = prompt.find("### Summary:\n") + len("### Summary:\n")
+            summary_tokens = self.tokenizer(prompt[summary_start:]).input_ids
+            if len(summary_tokens) > 1:  # bos/eos 토큰 제외
+                labels[i, :-len(summary_tokens)+1] = -100  # 마지막 eos 토큰 유지
+        
+        # 커스텀 데이터셋 반환
+        return DialogueDataset(
+            input_ids=tokenized['input_ids'],
+            attention_mask=tokenized['attention_mask'],
+            labels=labels
         )
     
-    def _prepare_labels(self, input_ids: torch.Tensor) -> torch.Tensor:
-        """레이블 준비 (패딩 토큰을 -100으로 변환)"""
-        labels = input_ids.clone()
-        labels[labels == self.tokenizer.pad_token_id] = -100
-        return labels
+    def _prepare_seq2seq_dataset(self, df):
+        """기존 seq2seq 모델용 데이터셋 준비"""
+        # 데이터 유효성 검사
+        if 'dialogue' not in df.columns or 'summary' not in df.columns:
+            raise ValueError("데이터셋에 'dialogue'와 'summary' 컬럼이 필요합니다.")
+        
+        # 입력 텍스트 토크나이징
+        encoder_inputs = self.tokenizer(
+            df['dialogue'].tolist(),
+            padding="max_length",
+            truncation=True,
+            max_length=self.config.encoder_max_len,
+            return_tensors="pt"
+        )
+        
+        # 레이블(요약) 토크나이징
+        with self.tokenizer.as_target_tokenizer():
+            labels = self.tokenizer(
+                df['summary'].tolist(),
+                padding="max_length",
+                truncation=True,
+                max_length=self.config.decoder_max_len,
+                return_tensors="pt"
+            )
+        
+        # 패딩 토큰을 -100으로 변경 (loss 계산에서 제외)
+        labels['input_ids'][labels['input_ids'] == self.tokenizer.pad_token_id] = -100
+        
+        # 커스텀 데이터셋 반환
+        return DialogueDataset(
+            input_ids=encoder_inputs['input_ids'],
+            attention_mask=encoder_inputs['attention_mask'],
+            labels=labels['input_ids']
+        )
 
 
-def load_dataset(data_path: str, split: str = None):
-    """데이터셋 로드 유틸리티 함수"""
-    processor = DataProcessor(data_path=data_path)
-    train_df, val_df, test_df = processor.load_data()
+def load_dataset(data_path: str, split: Optional[str] = None) -> pd.DataFrame:
+    """CSV 파일에서 데이터셋 직접 로드"""
+    data_path = Path(data_path)
     
     if split is None:
+        # 모든 split 반환
+        train_df = pd.read_csv(data_path / "train.csv")
+        val_df = pd.read_csv(data_path / "dev.csv")
+        test_df = pd.read_csv(data_path / "test.csv")
         return train_df, val_df, test_df
-    
-    split_map = {'train': train_df, 'dev': val_df, 'test': test_df}
-    return split_map.get(split) 
+    else:
+        # 특정 split만 반환
+        filename = "dev.csv" if split == "dev" else f"{split}.csv"
+        return pd.read_csv(data_path / filename) 

@@ -1,6 +1,6 @@
 defaults:
   - _self_
-  - model: bllossom
+  - model: t5
   - train: train
 
 debug:

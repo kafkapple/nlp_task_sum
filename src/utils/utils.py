@@ -29,20 +29,20 @@ def convert_to_basic_types(obj):
     else:
         return str(obj)
 
-def init_wandb(cfg: DictConfig):
+def init_wandb(cfg):
     """wandb 초기화"""
     try:
         if wandb.run is not None:
             wandb.finish()
             
-        output_dir = Path(cfg.general.output_path)
+        output_dir = Path(cfg['general']['output_path'])
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        if hasattr(cfg.general, 'wandb'):
+        if 'wandb' in cfg['general']:
             wandb.init(
-                project=cfg.general.wandb.project,
-                name=cfg.general.timestamp,
-                config=OmegaConf.to_container(cfg, resolve=True),
+                project=cfg['general']['wandb']['project'],
+                name=cfg['general']['timestamp'],
+                config=cfg,  # 이미 변환된 config 사용
                 dir=str(output_dir),
                 mode="online",
                 reinit=True
@@ -52,7 +52,7 @@ def init_wandb(cfg: DictConfig):
         
     except Exception as e:
         print(f"Warning: wandb initialization failed: {str(e)}")
-        return Path(cfg.general.output_path)
+        return Path(cfg['general']['output_path'])
 
 def get_model_size(model):
     """모델의 파라미터 수를 반환"""

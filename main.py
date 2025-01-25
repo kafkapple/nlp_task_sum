@@ -29,18 +29,20 @@ from src.utils.few_shot_selector import FewShotSelector
 @hydra.main(version_base="1.2", config_path="config", config_name="config")
 def main(cfg: DictConfig):
     try:
-        # 모든 random seed 설정
+        # config를 기본 Python 타입으로 변환
+        cfg_dict = OmegaConf.to_container(cfg, resolve=True)
+        
+        # 모든 random seed 설정 (원본 cfg 사용)
         setup_seeds(cfg.general.seed)
-        #pl.seed_everything(cfg.general.seed)
         
-        # output_dir 초기화
-        output_dir = init_wandb(cfg)
+        # output_dir 초기화 (변환된 cfg_dict 전달)
+        output_dir = init_wandb(cfg_dict)
         
-        # Ensure data directory exists
+        # Ensure data directory exists (원본 cfg 사용)
         download_and_extract(cfg.url.data, cfg.general.data_path)
         
         print("모델 생성 시작...")
-        model = ModelFactory.create_model(cfg)
+        model = ModelFactory.create_model(cfg)  # 원본 cfg 사용
         print("모델 생성 완료")
         
         if hasattr(model, 'model'):

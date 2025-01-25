@@ -33,20 +33,77 @@ class LlamaModel:
     def __init__(self, cfg):
         self.cfg = cfg
         
-        # 모델과 토크나이저 초기화
+        # 토크나이저 초기화
         self.tokenizer = AutoTokenizer.from_pretrained(
             cfg.model.name,
             cache_dir=cfg.huggingface.cache_dir,
-            token=cfg.huggingface.token
+            token=cfg.huggingface.token,
+            padding_side="left",  # LLaMA는 left padding 사용
+            truncation_side="left"  # 왼쪽에서 자르기
         )
         
-        # 모델 초기화 - model 속성으로 저장
+        # pad_token이 없으면 추가
+        if not self.tokenizer.pad_token:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
+        
+        # 양자화 설정
+        if cfg.model.quantization.enabled:
+            compute_dtype = getattr(torch, cfg.model.quantization.compute_dtype)
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=cfg.model.quantization.precision == "int4",
+                load_in_8bit=cfg.model.quantization.precision == "int8",
+                bnb_4bit_compute_dtype=compute_dtype,
+                bnb_4bit_use_double_quant=cfg.model.quantization.double_quant,
+                bnb_4bit_quant_type=cfg.model.quantization.quant_type
+            )
+        else:
+            bnb_config = None
+        
+        # 모델 초기화
         self.model = AutoModelForCausalLM.from_pretrained(
             cfg.model.name,
             cache_dir=cfg.huggingface.cache_dir,
             token=cfg.huggingface.token,
-            device_map="auto"
+            quantization_config=bnb_config,
+            torch_dtype=getattr(torch, cfg.model.torch_dtype),
+            trust_remote_code=cfg.model.trust_remote_code,
+            device_map=cfg.model.device_map
         )
+        
+        # 양자화된 모델을 위한 준비
+        if cfg.model.quantization.enabled:
+            self.model = prepare_model_for_kbit_training(
+                self.model,
+                use_gradient_checkpointing=cfg.train.training.gradient_checkpointing
+            )
+        
+        # LoRA 설정이 있으면 적용
+        if cfg.model.lora.enabled:
+            # 쉼표로 구분된 문자열을 리스트로 변환
+            target_modules = cfg.model.lora.target_modules.split(',')
+            
+            lora_config = LoraConfig(
+                r=cfg.model.lora.r,
+                lora_alpha=cfg.model.lora.alpha,
+                target_modules=target_modules,
+                lora_dropout=cfg.model.lora.dropout,
+                bias=cfg.model.lora.bias,
+                task_type=TaskType.CAUSAL_LM
+            )
+            self.model = get_peft_model(self.model, lora_config)
+            self.model.print_trainable_parameters()
+        else:
+            # LoRA를 사용하지 않는 경우 모든 파라미터를 학습 가능하도록 설정
+            for param in self.model.parameters():
+                param.requires_grad = True
+        
+        # Gradient Checkpointing 활성화 (메모리 절약)
+        if cfg.train.training.gradient_checkpointing:
+            self.model.gradient_checkpointing_enable()
+        
+        # 모델을 학습 모드로 설정
+        self.model.train()
         
         # 프롬프트 템플릿 설정
         self.prompt_templates = cfg.prompt_templates
