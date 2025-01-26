@@ -1,7 +1,7 @@
 defaults:
   - _self_
-  - model: llama
-  - train: llama
+  - model: t5
+  - train: train
 
 debug:
   enabled: false
@@ -122,14 +122,14 @@ lora:
 
 common:
   additional_special_tokens:
-    - "#PhoneNumber#"
-    - "#Address#"
-    - "#DateOfBirth#"
-    - "#PassportNumber#"
-    - "#SSN#"
-    - "#CardNumber#"
-    - "#CarNumber#"
-    - "#Email#" 
+    # - "#PhoneNumber#"
+    # - "#Address#"
+    # - "#DateOfBirth#"
+    # - "#PassportNumber#"
+    # - "#SSN#"
+    # - "#CardNumber#"
+    # - "#CarNumber#"
+    # - "#Email#" 
 
 
 custom_config:

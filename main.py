@@ -12,6 +12,7 @@ from pathlib import Path
 from transformers import Seq2SeqTrainingArguments
 from omegaconf import OmegaConf
 import pandas as pd
+import numpy as np
 
 # Beta transforms 경고 끄기
 torchvision.disable_beta_transforms_warning()
@@ -256,30 +257,34 @@ def main(cfg: DictConfig):
                     
                     # 입력 디코딩
                     try:
-                        input_ids = sample_input[0].cpu().numpy().tolist()  # numpy 배열을 리스트로 변환
+                        input_ids = sample_input[0].cpu().numpy().astype(np.int32).tolist()  # int32로 변환
                         print(f"\nSample Input:\n{model.tokenizer.decode(input_ids, skip_special_tokens=True)}")
                     except Exception as e:
                         print(f"\nWarning: Failed to decode input: {e}")
+                        print("Input shape:", sample_input[0].shape)
+                        print("Input dtype:", sample_input[0].dtype)
                     
                     # 출력 디코딩
                     try:
-                        output_ids = sample_output[0].cpu().numpy().tolist()  # numpy 배열을 리스트로 변환
+                        output_ids = sample_output[0].cpu().numpy().astype(np.int32).tolist()  # int32로 변환
                         print(f"\nGenerated Summary:\n{model.tokenizer.decode(output_ids, skip_special_tokens=True)}")
                     except Exception as e:
                         print(f"\nWarning: Failed to decode output: {e}")
+                        print("Output shape:", sample_output[0].shape)
+                        print("Output dtype:", sample_output[0].dtype)
                     
                     # 레이블 디코딩
                     try:
-                        labels = val_dataset[0]['labels'].cpu().numpy()
-                        valid_labels = labels[labels != -100].tolist()  # -100 값 제외하고 리스트로 변환
-                        if valid_labels:  # 유효한 레이블이 있는 경우에만 디코딩
+                        labels = val_dataset[0]['labels'].cpu().numpy().astype(np.int32)  # int32로 변환
+                        valid_labels = labels[labels != -100].tolist()
+                        if valid_labels:
                             print(f"\nGold Summary:\n{model.tokenizer.decode(valid_labels, skip_special_tokens=True)}")
                         else:
                             print("\nWarning: No valid labels found")
                     except Exception as e:
                         print(f"\nWarning: Failed to decode labels: {e}")
                         print("Labels shape:", labels.shape if hasattr(labels, 'shape') else 'unknown')
-                        print("Valid labels:", valid_labels if 'valid_labels' in locals() else 'not created')
+                        print("Labels dtype:", labels.dtype if hasattr(labels, 'dtype') else 'unknown')
                     
                     print("\n" + "="*100)
                     
