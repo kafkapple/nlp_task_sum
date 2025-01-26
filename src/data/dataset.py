@@ -238,6 +238,48 @@ class DataProcessor:
             attention_mask=inputs['attention_mask']
         )
     
+    def _prepare_llama_dataset(self, df):
+        """LLaMA 모델용 데이터셋 준비"""
+        # 데이터 유효성 검사
+        if 'dialogue' not in df.columns or 'summary' not in df.columns:
+            raise ValueError("데이터셋에 'dialogue'와 'summary' 컬럼이 필요합니다.")
+        
+        # LLaMA 형식의 프롬프트 생성
+        prompts = [
+            f"### Dialogue:\n{dialogue}\n\n### Summary:\n{summary}"
+            for dialogue, summary in zip(df['dialogue'], df['summary'])
+        ]
+        
+        # 토크나이징
+        tokenized = self.tokenizer(
+            prompts,
+            padding="max_length",
+            truncation=True,
+            max_length=self.config.tokenizer.max_length,
+            return_tensors="pt"
+        )
+        
+        # 레이블 생성
+        labels = tokenized['input_ids'].clone()
+        
+        # dialogue 부분을 -100으로 마스킹
+        for i, prompt in enumerate(prompts):
+            summary_start = prompt.find("### Summary:\n") + len("### Summary:\n")
+            summary_tokens = self.tokenizer(prompt[summary_start:], 
+                                          truncation=True,
+                                          max_length=self.config.tokenizer.max_length).input_ids
+            if len(summary_tokens) > 1:  # bos/eos 토큰 제외
+                # dialogue 부분만 -100으로 마스킹
+                dialogue_end = len(tokenized['input_ids'][i]) - len(summary_tokens)
+                labels[i, :dialogue_end] = -100
+        
+        # 데이터셋 반환
+        return DialogueDataset(
+            input_ids=tokenized['input_ids'],
+            attention_mask=tokenized['attention_mask'],
+            labels=labels
+        )
+    
     def prepare_dataset(self, split: str):
         """데이터셋 준비"""
         df = pd.read_csv(self.data_path / f"{split}.csv")
@@ -278,7 +320,12 @@ class DataProcessor:
         is_train = 'summary' in df.columns
         if self.model_family == 't5':
             return self._prepare_t5_dataset(df, is_train)
-        return self._prepare_bart_dataset(df, is_train)
+        elif self.model_family == 'bart':
+            return self._prepare_bart_dataset(df, is_train)
+        elif self.model_family == 'llama':
+            return self._prepare_llama_dataset(df)
+        else:
+            raise ValueError(f"Unknown model family: {self.model_family}")
 
 
 def load_dataset(data_path: str, split: Optional[str] = None) -> pd.DataFrame:
