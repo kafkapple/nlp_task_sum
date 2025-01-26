@@ -27,10 +27,11 @@ generation:
   repetition_penalty: 2.0
   no_repeat_ngram_size: 3
   early_stopping: true
-  temperature: 0.7
+  temperature: 0.8
   top_p: 0.9
   top_k: 50
   do_sample: true
+  length_ratio: 0.2  # 입력 길이 대비 생성 길이 비율
 
 # 양자화 설정
 quantization:

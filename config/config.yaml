@@ -66,6 +66,8 @@ general:
   data_path: "${hydra:runtime.cwd}/data"
   output_path: "outputs/${now:%Y%m%d_%H%M%S}"
   model_cache_dir: "${hydra:runtime.cwd}/../models"
+  model_type: "bart"  # 또는 "t5"
+  
   wandb:
     project: "dialogue-summary"
     entity: "ailab_upstage_fastcampus"
@@ -106,7 +108,7 @@ url:
 metrics:
   rouge-1: eval/rouge1_f1
   rouge-2: eval/rouge2_f1
-  rouge-l: eval/rougeL_f1
+  rouge-L: eval/rougeL_f1
 
 huggingface:
   token: ${oc.env:HUGGINGFACE_TOKEN}

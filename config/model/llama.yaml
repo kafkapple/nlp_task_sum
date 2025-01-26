@@ -5,6 +5,7 @@ mode: "prompt"
 # 토크나이저 설정
 tokenizer:
   max_length: 2048
+  max_target_length: 256  # 요약문 최대 길이
   padding_side: "left"
   truncation_side: "left"
 
@@ -18,12 +19,13 @@ model:
 generation:
   max_new_tokens: 32
   min_length: 10
-  temperature: 0.3
+  temperature: 0.8
   top_p: 0.9
-  repetition_penalty: 1.2
+  repetition_penalty: 2.0
   no_repeat_ngram_size: 3
   num_beams: 5
-  length_penalty: 1.0
+  length_penalty: 0.8
+  length_ratio: 0.2  # 입력 길이 대비 생성 길이 비율
   stop_sequences: [
     "###", "대화", "Summary:", "Dialogue:", 
     "아래 대화를", "다음 대화를", "#",

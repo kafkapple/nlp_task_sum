@@ -2,6 +2,7 @@
 #   - ../common  # 이 부분 제거
 
 name: "gogamza/kobart-summarization"
+
 mode: "finetune"
 family: "bart"
 
@@ -16,6 +17,7 @@ quantization:
 
 tokenizer:
   max_length: 512
+  max_target_length: 128  # 요약문 최대 길이
   padding: "max_length"
   truncation: true
   return_tensors: "pt"
@@ -39,6 +41,7 @@ generation:
   top_p: 0.9
   top_k: 50
   do_sample: true
+  length_ratio: 0.2  # 입력 길이 대비 생성 길이 비율
 # Few-shot 설정
 prompt:
   mode: "few-shot"  # "zero-shot" 또는 "few-shot"

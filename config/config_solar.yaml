@@ -1,10 +1,10 @@
 defaults:
   - _self_
-  - model: kobart
+  - model: solar
   - train: train
 
 debug:
-  enabled: true
+  enabled: false
   train_samples: 10
   val_samples: 2
 prompt_templates:
@@ -80,7 +80,7 @@ prompt:
     Following the instructions below...
 
 inference:
-  enabled: false
+  enabled: true
   batch_size: 32
   ckt_path: "${general.output_path}/checkpoint-500"
   no_repeat_ngram_size: 3
@@ -109,8 +109,8 @@ huggingface:
   cache_dir: ${general.model_cache_dir}
 
 custom_config:
-  inference: false
-  few_shot: false
+  inference: true
+  few_shot: true
   n_few_shot_samples: 1
   few_shot_selection: "baseline"
   n_val_samples: 100
