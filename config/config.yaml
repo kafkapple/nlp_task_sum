@@ -122,21 +122,21 @@ lora:
 
 common:
   additional_special_tokens:
-    # - "#PhoneNumber#"
-    # - "#Address#"
-    # - "#DateOfBirth#"
-    # - "#PassportNumber#"
-    # - "#SSN#"
-    # - "#CardNumber#"
-    # - "#CarNumber#"
-    # - "#Email#" 
+    - "#PhoneNumber#"
+    - "#Address#"
+    - "#DateOfBirth#"
+    - "#PassportNumber#"
+    - "#SSN#"
+    - "#CardNumber#"
+    - "#CarNumber#"
+    - "#Email#" 
 
 
 custom_config:
-  inference: false
-  few_shot: false
+  inference: true
+  few_shot: true
   n_few_shot_samples: 1
-  few_shot_selection: "baseline"
+  few_shot_selection: "length"
   n_val_samples: 100
   temperature: 0.3
   max_new_tokens: 150

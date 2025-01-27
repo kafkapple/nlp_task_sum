@@ -95,7 +95,7 @@ class T5Summarizer(BaseModel):
         """배치 단위 요약 생성"""
         summaries = []
         
-        for dialogue in tqdm(dialogues, desc="Generating summaries"):
+        for idx, dialogue in enumerate(tqdm(dialogues, desc="Generating summaries")):
             # 프롬프트 생성
             prompt = self._build_prompt(
                 dialogue, 
@@ -103,6 +103,16 @@ class T5Summarizer(BaseModel):
                 sample_summary, 
                 prompt_version
             )
+            
+            # 첫 번째 대화의 프롬프트 출력
+            if idx == 0:
+                print("\n=== Sample Prompt ===")
+                print(prompt)
+                print("=== Token Length ===")
+                print(f"Input tokens: {len(self.tokenizer.encode(dialogue))}")
+                if sample_dialogue:
+                    print(f"Sample tokens: {len(self.tokenizer.encode(sample_dialogue))}")
+                print("==================\n")
             
             # 입력 텍스트 길이 계산 (토큰 기준)
             input_length = len(self.tokenizer.encode(dialogue))
@@ -137,6 +147,13 @@ class T5Summarizer(BaseModel):
             
             summary = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
             summaries.append(summary)
+            
+            # 첫 번째 대화의 요약 결과 출력
+            if idx == 0:
+                print("\n=== First Summary ===")
+                print(f"Generated Summary: {summary}")
+                print(f"Summary tokens: {len(self.tokenizer.encode(summary))}")
+                print("====================\n")
             
         return summaries
 
