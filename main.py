@@ -34,19 +34,32 @@ def main(cfg: DictConfig):
         print("\n=== Initial Config ===")
         print(f"Original debug.enabled: {cfg.debug.enabled}")
         
-        # 중요 설정 값들을 먼저 저장
-        debug_enabled = cfg.debug.enabled
-        special_tokens = OmegaConf.to_container(cfg.common.additional_special_tokens, resolve=True)
+        # 전체 config를 resolve=True로 변환
+        resolved_cfg = OmegaConf.to_container(cfg, resolve=True)
+        
+        # 중요 설정 값들 저장
+        debug_enabled = resolved_cfg['debug']['enabled']
+        special_tokens = resolved_cfg['common']['additional_special_tokens']
         
         print(f"Stored debug_enabled: {debug_enabled}")
         
-        # config를 기본 Python 타입으로 변환
+        # config를 기본 Python 타입으로 변환 (resolve=False는 유지)
         cfg_dict = OmegaConf.to_container(cfg, resolve=False)
-        print(f"After to_container debug.enabled: {cfg_dict.get('debug', {}).get('enabled', 'NOT_FOUND')}")
         
-        # 중요 설정 값들 복원
-        cfg_dict['debug'] = {'enabled': debug_enabled}
-        print(f"After restoration debug.enabled: {cfg_dict['debug']['enabled']}")
+        # resolved된 값들 복원
+        for key, value in resolved_cfg.items():
+            if isinstance(value, dict):
+                if key not in cfg_dict:
+                    cfg_dict[key] = {}
+                cfg_dict[key].update(value)
+            else:
+                cfg_dict[key] = value
+                
+        print("\n=== Config Check ===")
+        print(f"debug.enabled: {cfg_dict.get('debug', {}).get('enabled', 'NOT_FOUND')}")
+        print(f"special_tokens: {cfg_dict.get('common', {}).get('additional_special_tokens', 'NOT_FOUND')}")
+        print(f"model.name: {cfg_dict.get('model', {}).get('name', 'NOT_FOUND')}")
+        print(f"output_path: {cfg_dict.get('general', {}).get('output_path', 'NOT_FOUND')}")
         
         # 모든 random seed 설정
         setup_seeds(cfg.general.seed)
@@ -62,17 +75,21 @@ def main(cfg: DictConfig):
         print("\n=== After WandB Init ===")
         if wandb.run is not None:
             print(f"WandB config debug.enabled: {wandb.config.get('debug/enabled', 'NOT_FOUND')}")
+            print(f"WandB config model.name: {wandb.config.get('model/name', 'NOT_FOUND')}")
         
         print(f"Debug mode: {debug_enabled}")
         print(f"Special tokens: {special_tokens}")
         
-        # wandb 설정 확인
+        # wandb 설정 확인 및 업데이트
         if wandb.run is not None:
-            print("\n=== WandB Config Check ===")
-            print(f"Current WandB debug.enabled: {wandb.config.get('debug/enabled', 'NOT_FOUND')}")
-            # 명시적으로 다시 설정
-            wandb.config.update({"debug/enabled": debug_enabled}, allow_val_change=True)
-            print(f"After update WandB debug.enabled: {wandb.config.get('debug/enabled', 'NOT_FOUND')}")
+            print("\n=== WandB Config Update ===")
+            # 중요 설정들 명시적으로 업데이트
+            updates = {
+                "debug/enabled": debug_enabled,
+                "model/name": cfg_dict['model']['name'],
+                "general/output_path": cfg_dict['general']['output_path']
+            }
+            wandb.config.update(updates, allow_val_change=True)
         
         # Ensure data directory exists
         download_and_extract(cfg.url.data, cfg.general.data_path)
