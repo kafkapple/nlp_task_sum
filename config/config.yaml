@@ -7,13 +7,13 @@ prompt:
   version: "v2"
   use_in_train: false  # 학습 시 프롬프트 사용 여부
   use_in_inference: true  # 추론 시 프롬프트 사용 여부
-  n_samples: 100
+  n_samples: 2
   save_predictions: true
   system: "You are a expert in the field of dialogue summarization..."
   instruction: |
     Following the instructions below...
 debug:
-  enabled: false
+  enabled: true
   train_samples: 20
   val_samples: 10
 prompt_templates:
@@ -24,49 +24,70 @@ prompt_templates:
       2. Keep the summary concise and simple (100자 이내)
       3. Do not include any English text
       4. Focus on the key points only
-    few_shot: |
-      다음 지시사항에 따라 대화를 요약하세요:
-      1. 한국어로만 요약하세요
-      2. 100자 이내로 간단명료하게 작성하세요
-      3. 핵심 내용만 포함하세요
-
-      Sample Dialogue:
-      {sample_dialogue}
-
-      Sample Summary:
-      {sample_summary}
-
-      Dialogue:
-      {dialogue}
-
-      Summary:
-    zero_shot: |
-      Summarize the following dialogue:
-      Dialogue: {dialogue}
-      Summary:
+      5. Convert colloquial language into formal written language
+    instruction: |
+      Please summarize the following dialogue in Korean.
+      Be concise and focus on the key points.
+      Keep it under 100 characters.
+    few_shot:
+      user: |
+        다음 대화를 요약해주세요:
+        
+        Sample Dialogue:
+        {sample_dialogue}
+        
+        Summary:
+      assistant: |
+        {sample_summary}
+      final_user: |
+        Dialogue:
+        {dialogue}
+        
+        Summary:
+    zero_shot:
+      user: |
+        다음 대화를 요약해주세요:
+        
+        Dialogue:
+        {dialogue}
+        
+        Summary:
   "2":
     system: |
-      You are a Korean dialogue summarizer. Provide a concise summary in Korean only.
+      You are a expert in the field of dialogue summarization, summarize the given dialogue in a concise manner. Follow the user's instruction carefully and provide a summary that is relevant to the dialogue.
       Rules:
       1. Only output the summary, nothing else
       2. Do not include any instructions or markers
       3. Keep it simple and focused
+      4. Convert the provided colloquial language into formal written language.
     instruction: |
-      Please summarize the following dialogue in Korean.
-      Be concise and focus on the key points.
+      Following the instructions below, summarize the given document.
+      Instructions:
+      1. Read the provided sample dialogue and corresponding summary.
+      2. Read the dialogue carefully.
+      3. Following the sample's style of summary, provide a concise summary of the given dialogue.
+      4. Be sure that the summary is simple but captures the essence of the dialogue.
+      5. Keep the summary under 100 characters.
     few_shot:
       user: |
+        Following the instructions above, summarize the given document.
+        
         Dialogue:
         {sample_dialogue}
+        
         Summary:
-      assistant: "{sample_summary}"
+      assistant: |
+        {sample_summary}
       final_user: |
         Dialogue:
         {dialogue}
+        
         Summary:
     zero_shot: |
-      Create a concise summary of this dialogue:
+      Following the instructions above, summarize the given document.
+      
       Dialogue: {dialogue}
+      
       Summary:
 
 general:
@@ -87,17 +108,25 @@ inference:
   enabled: true
   batch_size: 32
   ckt_path: "${general.output_path}/checkpoint-500"
-  no_repeat_ngram_size: 3
-  early_stopping: true
-  # generate_max_length: 200
-  max_new_tokens: 200  # 200자 * 3토큰
-  min_new_tokens: 50 # 100자 * 3토큰\
+  
+  # 추론시 생성 설정
+  max_new_tokens: 200  # max_length 대신 max_new_tokens 사용
+  min_new_tokens: 50   # min_length 대신 min_new_tokens 사용
   num_beams: 5
+  length_penalty: 0.6
+  repetition_penalty: 1.3
+  no_repeat_ngram_size: 3
+  early_stopping: false
+  do_sample: true
+  temperature: 0.7
+  top_p: 0.9
+  top_k: 50
+  
   remove_tokens: 
-    - <usr>
-    - <s>
-    - </s>
-    - <pad>
+    - "<usr>"
+    - "<s>"
+    - "</s>"
+    - "<pad>"
 data:
   split_strategy: "stratified"
   split_ratio: 0.2

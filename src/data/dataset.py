@@ -204,17 +204,23 @@ class DataProcessor:
                     return_tensors="pt"
                 )
             
-            # 레이블 토크나이징
-            with self.tokenizer.as_target_tokenizer():
-                labels = self.tokenizer(
-                    examples["summary"],
-                    max_length=self.config.tokenizer.decoder_max_len,
-                    padding="max_length",
-                    truncation=True,
-                    return_tensors="pt"
-                )
+            # 레이블 토크나이징 (학습/검증 데이터셋만)
+            if split != "test" and "summary" in examples:
+                with self.tokenizer.as_target_tokenizer():
+                    labels = self.tokenizer(
+                        examples["summary"],
+                        max_length=self.config.tokenizer.decoder_max_len,
+                        padding="max_length",
+                        truncation=True,
+                        return_tensors="pt"
+                    )
+                model_inputs["labels"] = labels["input_ids"]
             
-            model_inputs["labels"] = labels["input_ids"]
+            # 텐서 변환 확인
+            for key in model_inputs:
+                if isinstance(model_inputs[key], list):
+                    model_inputs[key] = torch.tensor(model_inputs[key])
+            
             return model_inputs
             
         # 데이터셋 생성
@@ -224,6 +230,12 @@ class DataProcessor:
             batched=True,
             remove_columns=dataset.column_names
         )
+        
+        # 데이터셋 포맷 변환 (테스트 데이터셋은 labels 제외)
+        columns = ['input_ids', 'attention_mask']
+        if split != "test":
+            columns.append('labels')
+        dataset.set_format(type='torch', columns=columns)
         
         # 첫 번째 예제의 프롬프트 출력 (디버깅용)
         if use_prompt and len(dataset) > 0:

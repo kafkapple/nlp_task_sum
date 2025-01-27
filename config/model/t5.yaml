@@ -18,7 +18,7 @@ quantization:
   compute_dtype: "float16"
 
 # 모델 초기화 설정
-init_weights: true
+init_weights: false #true
 force_download: false
 resume_from_checkpoint: false
 tokenizer:
@@ -34,19 +34,21 @@ tokenizer:
   special_tokens:
     additional_special_tokens: ${common.additional_special_tokens}  # 참조 방식 수정
 
+# 모델 기본 설정
+model:
+  name: "eenzeenee/t5-base-korean-summarization"
+  family: "t5"
+
+# 기본 생성 설정 (train.yaml이나 config.yaml에서 override 가능)
 generation:
+  max_new_tokens: 250  # max_length 대신 max_new_tokens 사용
+  min_new_tokens: 50   # min_length 대신 min_new_tokens 사용
   num_beams: 5
-  max_new_tokens: 250  # 100글자 * 2.5토큰 = 250토큰
-  min_new_tokens: 50   # 20글자 * 2.5토큰 = 50토큰
-  length_penalty: 0.5  # 짧은 문장 선호
+  length_penalty: 0.6
   repetition_penalty: 2.0
   no_repeat_ngram_size: 3
   early_stopping: true
-  temperature: 0.7
-  top_p: 0.9
-  top_k: 50
-  do_sample: true
-  length_ratio: 0.15  # 입력 대비 출력 길이 비율
+  bad_words_ids: null  # train.yaml이나 config.yaml에서 필요시 override
 
 # Few-shot 설정
 prompt:

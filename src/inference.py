@@ -141,7 +141,7 @@ class DialogueInference:
         # 데이터 준비
         processor = DataProcessor(
             tokenizer=self.tokenizer, 
-            config=self.cfg.model,  # TokenizerConfig 대신 전체 모델 config 전달
+            config=self.cfg.model,
             data_path=data_path
         )
         
@@ -150,13 +150,21 @@ class DialogueInference:
         if not os.path.exists(test_file_path):
             raise ValueError(f"Test file not found at {test_file_path}")
         
-        test_dataset = processor.prepare_dataset("test")  # split 이름으로 변경
+        # test 데이터셋 준비 (summary 컬럼이 없는 경우 처리)
+        test_df = pd.read_csv(test_file_path)
+        if 'summary' not in test_df.columns:
+            test_df['summary'] = ''  # 빈 문자열로 채움
+            # 수정된 DataFrame을 임시 파일로 저장
+            processed_test_path = os.path.join(data_path, "processed_test.csv")
+            test_df.to_csv(processed_test_path, index=False)
+            data_path = os.path.dirname(processed_test_path)  # 새로운 데이터 경로 설정
+        
+        test_dataset = processor.prepare_dataset("processed_test" if 'summary' not in test_df.columns else "test")
         
         # 요약문 생성
         summaries = self.generate_summaries(test_dataset)
         
         # 결과 저장
-        test_df = pd.read_csv(test_file_path)
         results = pd.DataFrame({
             'fname': test_df['fname'],
             'summary': summaries

@@ -89,14 +89,23 @@ class TrainerMetrics:
                     print(f"ROUGE-2: {scores['rouge-2']['f']:.4f}")
                     print(f"ROUGE-L: {scores['rouge-l']['f']:.4f}")
                     
+                    # rouge 라이브러리의 키 이름을 우리의 메트릭 이름으로 매핑
+                    metric_mapping = {
+                        'rouge-1': 'rouge1_f1',
+                        'rouge-2': 'rouge2_f1',
+                        'rouge-l': 'rougeL_f1'
+                    }
+                    
                     sample_data = {
                         'id': i,
                         'prediction': pred,
                         'gold_summary': label,
-                        'rouge-1': float(scores['rouge-1']['f']),
-                        'rouge-2': float(scores['rouge-2']['f']),
-                        'rouge-L': float(scores['rouge-l']['f'])
                     }
+                    
+                    # 매핑된 이름으로 메트릭 저장
+                    for rouge_key, metric_name in metric_mapping.items():
+                        sample_data[metric_name] = float(scores[rouge_key]['f'])
+                        
                     samples_data.append(sample_data)
                 except Exception as e:
                     print(f"Error calculating ROUGE for sample {i}: {str(e)}")
@@ -112,11 +121,11 @@ class TrainerMetrics:
             # DataFrame 생성
             df = pd.DataFrame(samples_data)
             
-            # 평균 ROUGE 점수 계산
+            # 평균 ROUGE 점수 계산 (Trainer용 - eval_ prefix 없이)
             metrics = {
-                'rouge1_f1': float(df['rouge-1'].mean()),
-                'rouge2_f1': float(df['rouge-2'].mean()),
-                'rougeL_f1': float(df['rouge-L'].mean())
+                'rouge1_f1': float(df['rouge1_f1'].mean()),
+                'rouge2_f1': float(df['rouge2_f1'].mean()),
+                'rougeL_f1': float(df['rougeL_f1'].mean())
             }
             
             print("\n=== ROUGE Scores ===")
@@ -137,21 +146,22 @@ class TrainerMetrics:
             if wandb.run is not None:
                 try:
                     # 테이블 생성
-                    columns = ["id", "prediction", "gold_summary", "rouge-1", "rouge-2", "rouge-L"]
+                    columns = ["id", "prediction", "gold_summary", "rouge1_f1", "rouge2_f1", "rougeL_f1"]
                     data = [[d[col] for col in columns] for d in samples_data]
                     table = wandb.Table(columns=columns, data=data)
                     
-                    # 메트릭 로깅 - 기본 메트릭과 eval/ prefix 메트릭 모두 로깅
+                    # wandb용 메트릭 (eval/ prefix 사용)
                     wandb_metrics = {
                         f"predictions_table_{eval_step}": table,
-                        **metrics,  # 기본 메트릭 (rouge1_f1, rouge2_f1, rougeL_f1)
-                        **{f"eval/{k}": v for k, v in metrics.items()},  # eval/ prefix 메트릭
-                        "rouge_avg": sum(metrics.values()) / len(metrics),
-                        "step": self.step,
-                        "num_samples": len(df),
-                        "num_failed": len(failed_samples),
-                        "avg_prediction_length": df['prediction'].str.len().mean(),
-                        "avg_gold_length": df['gold_summary'].str.len().mean()
+                        "eval/rouge1_f1": metrics['rouge1_f1'],
+                        "eval/rouge2_f1": metrics['rouge2_f1'],
+                        "eval/rougeL_f1": metrics['rougeL_f1'],
+                        "eval/rouge_avg": sum(metrics.values()) / len(metrics),
+                        "eval/step": self.step,
+                        "eval/num_samples": len(df),
+                        "eval/num_failed": len(failed_samples),
+                        "eval/avg_prediction_length": df['prediction'].str.len().mean(),
+                        "eval/avg_gold_length": df['gold_summary'].str.len().mean()
                     }
                     wandb.log(wandb_metrics)
                     print("\nSuccessfully logged to wandb")
@@ -159,7 +169,7 @@ class TrainerMetrics:
                     print(f"Error in wandb logging: {str(e)}")
                     traceback.print_exc()
             
-            return metrics
+            return metrics  # Trainer가 eval_ prefix 추가
             
         except Exception as e:
             print(f"\n=== Error in Metric Calculation ===")
@@ -167,19 +177,19 @@ class TrainerMetrics:
             print(f"Error message: {str(e)}")
             traceback.print_exc()
             
-            # 기본값 반환
+            # 기본값 반환 (Trainer용)
             default_metrics = {
                 'rouge1_f1': 0.0,
                 'rouge2_f1': 0.0,
                 'rougeL_f1': 0.0
             }
             
-            # wandb에 에러 로깅
+            # wandb에 에러 로깅 (eval/ prefix 사용)
             if wandb.run is not None:
                 wandb.log({
-                    "error": str(e),
-                    "step": self.step,
-                    **default_metrics
+                    "eval/error": str(e),
+                    "eval/step": self.step,
+                    **{f"eval/{k}": v for k, v in default_metrics.items()}
                 })
             
             return default_metrics
@@ -189,6 +199,10 @@ class TrainerMetrics:
         if not isinstance(text, str):
             text = str(text)
         text = text.strip()
+        
+        # None이 아닌 유효한 토큰만 제거
         for token in self.remove_tokens:
-            text = text.replace(token, "")
+            if token is not None and isinstance(token, str):
+                text = text.replace(token, "")
+        
         return text if text else "empty" 
