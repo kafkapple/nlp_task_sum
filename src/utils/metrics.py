@@ -113,7 +113,7 @@ class TrainerMetrics:
             df = pd.DataFrame(samples_data)
             
             # 평균 ROUGE 점수 계산
-            result = {
+            metrics = {
                 'rouge1_f1': float(df['rouge-1'].mean()),
                 'rouge2_f1': float(df['rouge-2'].mean()),
                 'rougeL_f1': float(df['rouge-L'].mean())
@@ -121,7 +121,7 @@ class TrainerMetrics:
             
             print("\n=== ROUGE Scores ===")
             print(f"Number of valid samples: {len(df)}")
-            for k, v in result.items():
+            for k, v in metrics.items():
                 print(f"{k}: {v:.4f}")
             
             # 결과 저장
@@ -141,25 +141,25 @@ class TrainerMetrics:
                     data = [[d[col] for col in columns] for d in samples_data]
                     table = wandb.Table(columns=columns, data=data)
                     
-                    # 메트릭 로깅
-                    wandb.log({
-                        f"eval/predictions_table_{eval_step}": table,
-                        "eval/rouge1_f1": result['rouge1_f1'],
-                        "eval/rouge2_f1": result['rouge2_f1'],
-                        "eval/rougeL_f1": result['rougeL_f1'],
-                        "eval/rouge_avg": sum(result.values()) / len(result),
-                        "eval/step": self.step,
-                        "eval/num_samples": len(df),
-                        "eval/num_failed": len(failed_samples),
-                        "eval/avg_prediction_length": df['prediction'].str.len().mean(),
-                        "eval/avg_gold_length": df['gold_summary'].str.len().mean()
-                    })
+                    # 메트릭 로깅 - 기본 메트릭과 eval/ prefix 메트릭 모두 로깅
+                    wandb_metrics = {
+                        f"predictions_table_{eval_step}": table,
+                        **metrics,  # 기본 메트릭 (rouge1_f1, rouge2_f1, rougeL_f1)
+                        **{f"eval/{k}": v for k, v in metrics.items()},  # eval/ prefix 메트릭
+                        "rouge_avg": sum(metrics.values()) / len(metrics),
+                        "step": self.step,
+                        "num_samples": len(df),
+                        "num_failed": len(failed_samples),
+                        "avg_prediction_length": df['prediction'].str.len().mean(),
+                        "avg_gold_length": df['gold_summary'].str.len().mean()
+                    }
+                    wandb.log(wandb_metrics)
                     print("\nSuccessfully logged to wandb")
                 except Exception as e:
                     print(f"Error in wandb logging: {str(e)}")
                     traceback.print_exc()
             
-            return result
+            return metrics
             
         except Exception as e:
             print(f"\n=== Error in Metric Calculation ===")
@@ -168,7 +168,7 @@ class TrainerMetrics:
             traceback.print_exc()
             
             # 기본값 반환
-            default_result = {
+            default_metrics = {
                 'rouge1_f1': 0.0,
                 'rouge2_f1': 0.0,
                 'rougeL_f1': 0.0
@@ -177,12 +177,12 @@ class TrainerMetrics:
             # wandb에 에러 로깅
             if wandb.run is not None:
                 wandb.log({
-                    "eval/error": str(e),
-                    "eval/step": self.step,
-                    **{f"eval/{k}": v for k, v in default_result.items()}
+                    "error": str(e),
+                    "step": self.step,
+                    **default_metrics
                 })
             
-            return default_result
+            return default_metrics
     
     def _clean_text(self, text: str) -> str:
         """텍스트 정리"""

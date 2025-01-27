@@ -160,12 +160,54 @@ class T5Summarizer(BaseModel):
     def _build_prompt(self, dialogue: str, sample_dialogue: str = None, 
                      sample_summary: str = None, prompt_version: str = "v1") -> str:
         """프롬프트 생성"""
+        # 템플릿 버전 선택
+        version = prompt_version.replace('v', '') if prompt_version else "1"
+        template = self.config.prompt_templates[version]
+        
+        # 프롬프트 생성
         if sample_dialogue and sample_summary:
             # few-shot 프롬프트
-            return f"Dialogue:\n{sample_dialogue}\nSummary:\n{sample_summary}\n\nDialogue:\n{dialogue}\nSummary:"
+            if version == "1":
+                prompt = template["few_shot"].format(
+                    sample_dialogue=sample_dialogue,
+                    sample_summary=sample_summary,
+                    dialogue=dialogue
+                )
+            else:  # version == "2"
+                prompt = (
+                    template["system"] + "\n" +
+                    template["instruction"] + "\n" +
+                    template["few_shot"]["user"].format(
+                        sample_dialogue=sample_dialogue
+                    ) + "\n" +
+                    template["few_shot"]["assistant"].format(
+                        sample_summary=sample_summary
+                    ) + "\n" +
+                    template["few_shot"]["final_user"].format(
+                        dialogue=dialogue
+                    )
+                )
         else:
             # zero-shot 프롬프트
-            return f"Dialogue:\n{dialogue}\nSummary:"
+            if version == "1":
+                prompt = template["zero_shot"].format(dialogue=dialogue)
+            else:  # version == "2"
+                prompt = (
+                    template["system"] + "\n" +
+                    template["instruction"] + "\n" +
+                    template["zero_shot"].format(dialogue=dialogue)
+                )
+        
+        # 프롬프트 정보 출력
+        print("\n=== Prompt Information ===")
+        print(f"Template Version: {version}")
+        print(f"Mode: {'Few-shot' if sample_dialogue else 'Zero-shot'}")
+        print("\n=== Full Prompt ===")
+        print("-" * 50)
+        print(prompt)
+        print("-" * 50)
+        
+        return prompt
 
     def _freeze_layers(self, num_layers_to_train: int = 2):
         """특정 레이어만 학습하도록 설정"""

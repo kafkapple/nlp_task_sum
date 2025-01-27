@@ -298,7 +298,7 @@ def main(cfg: DictConfig):
         raise
         
     finally:
-        if cfg.debug.enabled:
+        if not cfg.debug.enabled:
             try:
                 print("\n=== Starting Inference ===")
                 inference = DialogueInference(cfg)

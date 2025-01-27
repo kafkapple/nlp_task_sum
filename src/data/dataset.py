@@ -9,7 +9,8 @@ from tqdm import tqdm
 from abc import ABC, abstractmethod
 import numpy as np
 import json
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset as TorchDataset
+from datasets import Dataset
 
 def download_and_extract(url: str, data_path: str):
     """데이터 다운로드 및 압축 해제"""
@@ -75,7 +76,7 @@ class BaseDataset(ABC):
         pass
 
 
-class DialogueDataset(Dataset):
+class DialogueDataset(TorchDataset):
     """통합 대화 요약 데이터셋"""
     def __init__(self, input_ids, attention_mask, labels=None):
         self.input_ids = input_ids
@@ -109,236 +110,179 @@ class T5Dataset(BaseDataset):
 class DataProcessor:
     """데이터 처리 및 데이터셋 생성 클래스"""
     
-    def __init__(self, tokenizer=None, config=None, data_path=None):
+    def __init__(self, tokenizer, config, data_path):
         self.tokenizer = tokenizer
         self.config = config
-        self.data_path = Path(data_path) if data_path else None
+        self.data_path = data_path
         
-        # 모델 설정 직접 참조
-        self.model_family = config.family
-        self.stats = {}
-        self.length_ratio = config.generation.get('length_ratio', 0.5)
-    
-    def _compute_length_stats(self, texts, key_prefix):
-        """텍스트 길이 통계 계산 (문자 및 토큰)"""
-        char_lengths = [len(text) for text in texts]
-        stats = {
-            f"{key_prefix}_char_len": {
-                "min": min(char_lengths),
-                "max": max(char_lengths),
-                "mean": sum(char_lengths) / len(char_lengths),
-                "p95": np.percentile(char_lengths, 95)
-            }
-        }
+    def prepare_dataset(self, split: str, use_prompt: bool = False):
+        """데이터셋 준비
         
-        if self.tokenizer:
-            tokens = self.tokenizer(
-                texts, 
-                truncation=True,
-                max_length=self.config.tokenizer.max_length,
-                padding=False
-            )
-            token_lengths = [len(ids) for ids in tokens['input_ids']]
-            stats[f"{key_prefix}_token_len"] = {
-                "min": min(token_lengths),
-                "max": max(token_lengths),
-                "mean": sum(token_lengths) / len(token_lengths),
-                "p95": np.percentile(token_lengths, 95)
-            }
+        Args:
+            split: 데이터셋 분할("train", "validation", "test")
+            use_prompt: 프롬프트 템플릿 사용 여부
+        """
+        # 데이터 로드
+        train_df, val_df, test_df = load_dataset(self.data_path)
         
-        return stats
-    
-    def _adjust_generation_length(self, input_length):
-        """입력 길이에 따른 생성 길이 동적 조절"""
-        base_length = int(input_length * self.length_ratio)
-        
-        # 최소/최대 길이 제한 적용
-        min_tokens = self.config.generation.min_new_tokens
-        max_tokens = self.config.generation.max_new_tokens
-        
-        return max(min_tokens, min(base_length, max_tokens))
-    
-    def _prepare_t5_dataset(self, df, is_train=True):
-        """T5 모델용 데이터셋 준비"""
-        if is_train and 'summary' not in df.columns:
-            raise ValueError("학습 데이터셋에 'summary' 컬럼이 필요합니다.")
-        
-        # 입력 텍스트 토크나이징
-        inputs = self.tokenizer(
-            df['dialogue'].tolist(),
-            padding=True,
-            truncation=True,
-            max_length=self.config.tokenizer.max_length,
-            return_tensors="pt"
-        )
-        
-        # 학습 모드인 경우 레이블도 토크나이징
-        if is_train:
-            with self.tokenizer.as_target_tokenizer():
-                labels = self.tokenizer(
-                    df['summary'].tolist(),
-                    padding=True,
-                    truncation=True,
-                    max_length=self.config.tokenizer.max_target_length,
-                    return_tensors="pt"
-                )
-            
-            # 패딩 토큰을 -100으로 변경 (loss 계산에서 제외)
-            labels['input_ids'][labels['input_ids'] == self.tokenizer.pad_token_id] = -100
-            
-            return DialogueDataset(
-                input_ids=inputs['input_ids'],
-                attention_mask=inputs['attention_mask'],
-                labels=labels['input_ids']
-            )
-        
-        # 추론 모드
-        return DialogueDataset(
-            input_ids=inputs['input_ids'],
-            attention_mask=inputs['attention_mask']
-        )
-    
-    def _prepare_bart_dataset(self, df, is_train=True):
-        """BART 모델용 데이터셋 준비"""
-        if is_train and 'summary' not in df.columns:
-            raise ValueError("학습 데이터셋에 'summary' 컬럼이 필요합니다.")
-        
-        # 입력 텍스트 토크나이징
-        inputs = self.tokenizer(
-            df['dialogue'].tolist(),
-            padding=True,
-            truncation=True,
-            max_length=self.config.tokenizer.max_length,
-            return_tensors="pt"
-        )
-        
-        # 학습 모드인 경우 레이블도 토크나이징
-        if is_train:
-            with self.tokenizer.as_target_tokenizer():
-                labels = self.tokenizer(
-                    df['summary'].tolist(),
-                    padding=True,
-                    truncation=True,
-                    max_length=self.config.tokenizer.max_target_length,
-                    return_tensors="pt"
-                )
-            
-            # 패딩 토큰을 -100으로 변경 (loss 계산에서 제외)
-            labels['input_ids'][labels['input_ids'] == self.tokenizer.pad_token_id] = -100
-            
-            return DialogueDataset(
-                input_ids=inputs['input_ids'],
-                attention_mask=inputs['attention_mask'],
-                labels=labels['input_ids']
-            )
-        
-        # 추론 모드
-        return DialogueDataset(
-            input_ids=inputs['input_ids'],
-            attention_mask=inputs['attention_mask']
-        )
-    
-    def _prepare_llama_dataset(self, df):
-        """LLaMA 모델용 데이터셋 준비"""
-        # 데이터 유효성 검사
-        if 'dialogue' not in df.columns or 'summary' not in df.columns:
-            raise ValueError("데이터셋에 'dialogue'와 'summary' 컬럼이 필요합니다.")
-        
-        # LLaMA 형식의 프롬프트 생성
-        prompts = [
-            f"### Dialogue:\n{dialogue}\n\n### Summary:\n{summary}"
-            for dialogue, summary in zip(df['dialogue'], df['summary'])
-        ]
-        
-        # 토크나이징
-        tokenized = self.tokenizer(
-            prompts,
-            padding="max_length",
-            truncation=True,
-            max_length=self.config.tokenizer.max_length,
-            return_tensors="pt"
-        )
-        
-        # 레이블 생성
-        labels = tokenized['input_ids'].clone()
-        
-        # dialogue 부분을 -100으로 마스킹
-        for i, prompt in enumerate(prompts):
-            summary_start = prompt.find("### Summary:\n") + len("### Summary:\n")
-            summary_tokens = self.tokenizer(prompt[summary_start:], 
-                                          truncation=True,
-                                          max_length=self.config.tokenizer.max_length).input_ids
-            if len(summary_tokens) > 1:  # bos/eos 토큰 제외
-                # dialogue 부분만 -100으로 마스킹
-                dialogue_end = len(tokenized['input_ids'][i]) - len(summary_tokens)
-                labels[i, :dialogue_end] = -100
-        
-        # 데이터셋 반환
-        return DialogueDataset(
-            input_ids=tokenized['input_ids'],
-            attention_mask=tokenized['attention_mask'],
-            labels=labels
-        )
-    
-    def prepare_dataset(self, split: str):
-        """데이터셋 준비"""
-        df = pd.read_csv(self.data_path / f"{split}.csv")
-        
-        # 길이 통계 계산
-        dialogue_stats = self._compute_length_stats(
-            df['dialogue'].tolist(), 'dialogue'
-        )
-        self.stats[f"{split}_dialogue"] = dialogue_stats
-        
-        if 'summary' in df.columns:
-            summary_stats = self._compute_length_stats(
-                df['summary'].tolist(), 'summary'
-            )
-            self.stats[f"{split}_summary"] = summary_stats
-        
-        # 통계 저장
-        output_path = getattr(self.config, 'output_path', 'outputs')
-        stats_path = Path(output_path) / "data_stats"
-        stats_path.mkdir(parents=True, exist_ok=True)
-        with open(stats_path / f"{split}_stats.json", 'w') as f:
-            json.dump(self.stats, f, indent=2)
-        
-        # 동적 생성 길이 설정
-        if self.tokenizer and 'dialogue' in df.columns:
-            dialogue_stats = self.stats[f"{split}_dialogue"]
-            token_stats = dialogue_stats.get('dialogue_token_len', {})
-            if token_stats:
-                avg_input_length = int(token_stats['mean'])
-                new_max_tokens = self._adjust_generation_length(
-                    avg_input_length
-                )
-                
-                # 모델 설정 업데이트
-                self.config.generation.max_new_tokens = new_max_tokens
-        
-        # 모델별 데이터셋 준비
-        is_train = 'summary' in df.columns
-        if self.model_family == 't5':
-            return self._prepare_t5_dataset(df, is_train)
-        elif self.model_family == 'bart':
-            return self._prepare_bart_dataset(df, is_train)
-        elif self.model_family == 'llama':
-            return self._prepare_llama_dataset(df)
+        if split == "train":
+            df = train_df
+        elif split in ["validation", "dev"]:
+            df = val_df
         else:
-            raise ValueError(f"Unknown model family: {self.model_family}")
+            df = test_df
+            
+        # Few-shot 예제 선택 (학습 시에만)
+        sample_dialogue = None
+        sample_summary = None
+        if use_prompt and hasattr(self.config, 'custom_config') and self.config.custom_config.few_shot:
+            from src.utils.few_shot_selector import FewShotSelector
+            examples = FewShotSelector.select_examples(train_df, self.config)
+            sample_dialogue = examples["dialogue"]
+            sample_summary = examples["summary"]
+            
+        def preprocess_function(examples):
+            if use_prompt:
+                # 프롬프트 템플릿 적용
+                version = self.config.prompt.version.replace('v', '') if self.config.prompt.version else "1"
+                template = self.config.prompt_templates[version]
+                
+                if sample_dialogue and sample_summary:
+                    # Few-shot 프롬프트
+                    if version == "1":
+                        prompts = [
+                            template["few_shot"].format(
+                                sample_dialogue=sample_dialogue,
+                                sample_summary=sample_summary,
+                                dialogue=d
+                            ) for d in examples["dialogue"]
+                        ]
+                    else:  # version == "2"
+                        prompts = [
+                            template["system"] + "\n" +
+                            template["instruction"] + "\n" +
+                            template["few_shot"]["user"].format(
+                                sample_dialogue=sample_dialogue
+                            ) + "\n" +
+                            template["few_shot"]["assistant"].format(
+                                sample_summary=sample_summary
+                            ) + "\n" +
+                            template["few_shot"]["final_user"].format(
+                                dialogue=d
+                            ) for d in examples["dialogue"]
+                        ]
+                else:
+                    # Zero-shot 프롬프트
+                    if version == "1":
+                        prompts = [
+                            template["zero_shot"].format(dialogue=d)
+                            for d in examples["dialogue"]
+                        ]
+                    else:  # version == "2"
+                        prompts = [
+                            template["system"] + "\n" +
+                            template["instruction"] + "\n" +
+                            template["zero_shot"].format(dialogue=d)
+                            for d in examples["dialogue"]
+                        ]
+                
+                # 토크나이징
+                model_inputs = self.tokenizer(
+                    prompts,
+                    max_length=self.config.tokenizer.encoder_max_len,
+                    padding="max_length",
+                    truncation=True,
+                    return_tensors="pt"
+                )
+            else:
+                # 기존 방식 (프롬프트 없이)
+                model_inputs = self.tokenizer(
+                    examples["dialogue"],
+                    max_length=self.config.tokenizer.encoder_max_len,
+                    padding="max_length",
+                    truncation=True,
+                    return_tensors="pt"
+                )
+            
+            # 레이블 토크나이징
+            with self.tokenizer.as_target_tokenizer():
+                labels = self.tokenizer(
+                    examples["summary"],
+                    max_length=self.config.tokenizer.decoder_max_len,
+                    padding="max_length",
+                    truncation=True,
+                    return_tensors="pt"
+                )
+            
+            model_inputs["labels"] = labels["input_ids"]
+            return model_inputs
+            
+        # 데이터셋 생성
+        dataset = Dataset.from_pandas(df)
+        dataset = dataset.map(
+            preprocess_function,
+            batched=True,
+            remove_columns=dataset.column_names
+        )
+        
+        # 첫 번째 예제의 프롬프트 출력 (디버깅용)
+        if use_prompt and len(dataset) > 0:
+            print("\n=== Training Prompt Example ===")
+            decoded_prompt = self.tokenizer.decode(dataset[0]['input_ids'], skip_special_tokens=True)
+            print(decoded_prompt)
+            print("=" * 50)
+        
+        return dataset
 
 
 def load_dataset(data_path: str, split: Optional[str] = None) -> pd.DataFrame:
     """CSV 파일에서 데이터셋 직접 로드"""
     data_path = Path(data_path)
+    processed_path = data_path / "processed"
+    
+    # 전처리된 데이터가 없으면 전처리 수행
+    if not processed_path.exists() or not (processed_path / "train.csv").exists():
+        from src.data.data_preprocessor import DataPreprocessor
+        from hydra import compose, initialize
+        from hydra.core.global_hydra import GlobalHydra
+        
+        # Hydra 초기화 전에 clear
+        if GlobalHydra.instance().is_initialized():
+            GlobalHydra.instance().clear()
+            
+        # Hydra 초기화 및 config 로드
+        with initialize(version_base=None, config_path="../../config"):
+            cfg = compose(config_name="config")
+            cfg.general.data_path = str(data_path)
+            
+            # 전처리 설정 활성화
+            cfg.train.preprocessing.enabled = True
+            cfg.train.preprocessing.merge_train_dev = True
+            cfg.train.preprocessing.split_ratio = 0.2
+            cfg.train.preprocessing.stratify_by_length = True
+            cfg.train.preprocessing.length_strategy = "ratio"
+            cfg.train.preprocessing.random_state = cfg.general.seed
+            
+            # 전처리 수행
+            preprocessor = DataPreprocessor(cfg)
+            processed_path = preprocessor.prepare_data()
+    
+    # 파일 경로 설정 (processed_path가 이미 processed 디렉토리를 가리킴)
+    train_path = processed_path / "train.csv"
+    dev_path = processed_path / "dev.csv"
+    test_path = processed_path / "test.csv"
     
     if split is None:
         # 모든 split 반환
-        train_df = pd.read_csv(data_path / "train.csv")
-        val_df = pd.read_csv(data_path / "dev.csv")
-        test_df = pd.read_csv(data_path / "test.csv")
+        train_df = pd.read_csv(train_path)
+        val_df = pd.read_csv(dev_path)
+        test_df = pd.read_csv(test_path)
         return train_df, val_df, test_df
     else:
         # 특정 split만 반환
-        filename = "dev.csv" if split == "dev" else f"{split}.csv"
-        return pd.read_csv(data_path / filename) 
+        if split in ["validation", "dev"]:
+            return pd.read_csv(dev_path)
+        elif split == "test":
+            return pd.read_csv(test_path)
+        else:  # train
+            return pd.read_csv(train_path) 

@@ -2,9 +2,18 @@ defaults:
   - _self_
   - model: t5
   - train: train
-
+prompt:
+  mode: "few-shot"
+  version: "v2"
+  use_in_train: false  # 학습 시 프롬프트 사용 여부
+  use_in_inference: true  # 추론 시 프롬프트 사용 여부
+  n_samples: 100
+  save_predictions: true
+  system: "You are a expert in the field of dialogue summarization..."
+  instruction: |
+    Following the instructions below...
 debug:
-  enabled: true
+  enabled: false
   train_samples: 20
   val_samples: 10
 prompt_templates:
@@ -72,14 +81,7 @@ general:
     project: "dialogue-summary"
     entity: "ailab_upstage_fastcampus"
 
-prompt:
-  mode: "few-shot"
-  version: "v2"
-  n_samples: 100
-  save_predictions: true
-  system: "You are a expert in the field of dialogue summarization..."
-  instruction: |
-    Following the instructions below...
+
 
 inference:
   enabled: true

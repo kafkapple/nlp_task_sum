@@ -1,6 +1,7 @@
 import pandas as pd
 from pathlib import Path
 from sklearn.model_selection import train_test_split
+import shutil
 
 class DataPreprocessor:
     def __init__(self, config):
@@ -112,8 +113,16 @@ class DataPreprocessor:
             
         # 데이터 로드 및 병합
         train_df = pd.read_csv(self.data_path / "train.csv")
-        dev_df = pd.read_csv(self.data_path / "dev.csv")
         
+        # processed 폴더에서 먼저 찾고, 없으면 원본 경로에서 찾기
+        processed_val = self.data_path / "processed" / "validation.csv"
+        original_dev = self.data_path / "dev.csv"
+        
+        if processed_val.exists():
+            dev_df = pd.read_csv(processed_val)
+        else:
+            dev_df = pd.read_csv(original_dev)
+
         if self.preprocessing_config.merge_train_dev:
             print("train과 dev 데이터를 병합합니다.")
             combined_df = pd.concat([train_df, dev_df], ignore_index=True)
@@ -188,8 +197,16 @@ class DataPreprocessor:
             processed_dir = self.data_path / "processed"
             processed_dir.mkdir(exist_ok=True)
             
+            # train, dev 데이터 저장
             train_data.to_csv(processed_dir / "train.csv", index=False)
-            val_data.to_csv(processed_dir / "validation.csv", index=False)
+            val_data.to_csv(processed_dir / "dev.csv", index=False)
+            
+            # test 데이터 복사
+            test_src = self.data_path / "test.csv"
+            test_dst = processed_dir / "test.csv"
+            if test_src.exists():
+                shutil.copy2(test_src, test_dst)
+                print(f"test.csv를 {processed_dir}에 복사했습니다.")
             
             return processed_dir
         
