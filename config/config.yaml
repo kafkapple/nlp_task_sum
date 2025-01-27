@@ -4,7 +4,7 @@ defaults:
   - train: train
 
 debug:
-  enabled: false
+  enabled: true
   train_samples: 20
   val_samples: 10
 prompt_templates:
@@ -12,13 +12,13 @@ prompt_templates:
     system: |
       You are a Korean dialogue summarizer. Follow these rules:
       1. Summarize the dialogue in Korean only
-      2. Keep the summary concise and simple
+      2. Keep the summary concise and simple (100자 이내)
       3. Do not include any English text
       4. Focus on the key points only
     few_shot: |
       다음 지시사항에 따라 대화를 요약하세요:
       1. 한국어로만 요약하세요
-      2. 간단명료하게 작성하세요
+      2. 100자 이내로 간단명료하게 작성하세요
       3. 핵심 내용만 포함하세요
 
       Sample Dialogue:

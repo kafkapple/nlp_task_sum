@@ -104,6 +104,16 @@ class T5Summarizer(BaseModel):
                 prompt_version
             )
             
+            # 입력 텍스트 길이 계산 (토큰 기준)
+            input_length = len(self.tokenizer.encode(dialogue))
+            
+            # 목표 길이 계산 (ratio 기반)
+            target_length = int(input_length * self.config.generation.length_ratio)
+            
+            # max_new_tokens와 min_new_tokens를 동적으로 설정
+            max_tokens = min(int(target_length * 1.5), self.config.tokenizer.decoder_max_len)
+            min_tokens = max(int(target_length * 0.5), 10)  # 최소 10 토큰
+            
             # 토크나이징
             inputs = self.tokenizer(
                 prompt, 
@@ -115,8 +125,8 @@ class T5Summarizer(BaseModel):
             # 요약 생성
             outputs = self.model.generate(
                 **inputs,
-                max_new_tokens=self.config.generation.max_new_tokens,
-                min_new_tokens=self.config.generation.min_new_tokens,
+                max_new_tokens=max_tokens,
+                min_new_tokens=min_tokens,
                 num_beams=self.config.generation.num_beams,
                 temperature=self.config.generation.temperature,
                 top_p=self.config.generation.top_p,

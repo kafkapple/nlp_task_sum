@@ -6,6 +6,8 @@ mode: "finetune"
 family: "t5"
 
 # 모델 특화 설정
+tie_word_embeddings: true  # 토큰 임베딩 공유 설정
+tie_encoder_decoder: true  # 인코더-디코더 가중치 공유
 
 partial_training: true
 num_layers_to_train: 2
@@ -14,6 +16,11 @@ quantization:
   enabled: false
   precision: "int8"
   compute_dtype: "float16"
+
+# 모델 초기화 설정
+init_weights: true
+force_download: false
+resume_from_checkpoint: false
 tokenizer:
   max_length: 512
   max_target_length: 128  # 요약문 최대 길이
@@ -29,9 +36,9 @@ tokenizer:
 
 generation:
   num_beams: 5
-  max_new_tokens: 200
-  min_new_tokens: 50
-  length_penalty: 0.8
+  max_new_tokens: 250  # 100글자 * 2.5토큰 = 250토큰
+  min_new_tokens: 50   # 20글자 * 2.5토큰 = 50토큰
+  length_penalty: 0.5  # 짧은 문장 선호
   repetition_penalty: 2.0
   no_repeat_ngram_size: 3
   early_stopping: true
@@ -39,7 +46,7 @@ generation:
   top_p: 0.9
   top_k: 50
   do_sample: true
-  length_ratio: 0.2  # 입력 길이 대비 생성 길이 비율
+  length_ratio: 0.15  # 입력 대비 출력 길이 비율
 
 # Few-shot 설정
 prompt:

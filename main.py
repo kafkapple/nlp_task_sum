@@ -298,10 +298,14 @@ def main(cfg: DictConfig):
         raise
         
     finally:
-        if not cfg.debug.enabled and wandb.run is not None and wandb.run.status != "failed":
+        try:
+            print("\n=== Starting Inference ===")
             inference = DialogueInference(cfg)
             inference.inference(cfg.general.data_path)
-        
+            print("=== Inference Completed ===\n")
+        except Exception as e:
+            print(f"Error during inference: {str(e)}")
+    
         # wandb 정리
         if wandb.run is not None:
             if wandb.run.status != "failed":

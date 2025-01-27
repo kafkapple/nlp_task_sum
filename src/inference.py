@@ -141,7 +141,7 @@ class DialogueInference:
         # 데이터 준비
         processor = DataProcessor(
             tokenizer=self.tokenizer, 
-            config=self.model_config.tokenizer,  # TokenizerConfig 객체 직접 전달
+            config=self.cfg.model,  # TokenizerConfig 대신 전체 모델 config 전달
             data_path=data_path
         )
         
@@ -165,7 +165,9 @@ class DialogueInference:
         os.makedirs(self.cfg.general.output_path, exist_ok=True)
         output_path = f"{self.cfg.general.output_path}/predictions.csv"
         results.to_csv(output_path, index=False)
-        print(f"Predictions saved to {output_path}")
+        print(f"\nPredictions saved to: {os.path.abspath(output_path)}")
+        print(f"File exists: {os.path.exists(output_path)}")
+        print(f"File size: {os.path.getsize(output_path) if os.path.exists(output_path) else 'N/A'} bytes")
         
         return results
 
