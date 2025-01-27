@@ -31,16 +31,22 @@ from src.data.data_preprocessor import DataPreprocessor
 @hydra.main(version_base="1.2", config_path="config", config_name="config")
 def main(cfg: DictConfig):
     try:
-        # config를 기본 Python 타입으로 변환
-        cfg_dict = OmegaConf.to_container(cfg, resolve=True)
+        # config를 기본 Python 타입으로 변환 (resolve=False로 설정)
+        cfg_dict = OmegaConf.to_container(cfg, resolve=False)
         
-        # 모든 random seed 설정 (원본 cfg 사용)
+        # debug 설정 명시적 저장
+        debug_enabled = cfg.debug.enabled
+        
+        # 모든 random seed 설정
         setup_seeds(cfg.general.seed)
         
-        # output_dir 초기화 (변환된 cfg_dict 전달)
+        # output_dir 초기화 (debug 설정 포함)
+        cfg_dict['debug'] = {'enabled': debug_enabled}  # debug 설정 복원
         output_dir = init_wandb(cfg_dict)
         
-        # Ensure data directory exists (원본 cfg 사용)
+        print(f"Debug mode: {debug_enabled}")  # 디버그 모드 상태 출력
+        
+        # Ensure data directory exists
         download_and_extract(cfg.url.data, cfg.general.data_path)
         
         print("모델 생성 시작...")
@@ -298,14 +304,15 @@ def main(cfg: DictConfig):
         raise
         
     finally:
-        try:
-            print("\n=== Starting Inference ===")
-            inference = DialogueInference(cfg)
-            inference.inference(cfg.general.data_path)
-            print("=== Inference Completed ===\n")
-        except Exception as e:
-            print(f"Error during inference: {str(e)}")
-    
+        if cfg.debug.enabled:
+            try:
+                print("\n=== Starting Inference ===")
+                inference = DialogueInference(cfg)
+                inference.inference(cfg.general.data_path)
+                print("=== Inference Completed ===\n")
+            except Exception as e:
+                print(f"Error during inference: {str(e)}")
+        
         # wandb 정리
         if wandb.run is not None:
             if wandb.run.status != "failed":
