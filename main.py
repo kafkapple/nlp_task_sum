@@ -31,20 +31,48 @@ from src.data.data_preprocessor import DataPreprocessor
 @hydra.main(version_base="1.2", config_path="config", config_name="config")
 def main(cfg: DictConfig):
     try:
-        # config를 기본 Python 타입으로 변환 (resolve=False로 설정)
-        cfg_dict = OmegaConf.to_container(cfg, resolve=False)
+        print("\n=== Initial Config ===")
+        print(f"Original debug.enabled: {cfg.debug.enabled}")
         
-        # debug 설정 명시적 저장
+        # 중요 설정 값들을 먼저 저장
         debug_enabled = cfg.debug.enabled
+        special_tokens = OmegaConf.to_container(cfg.common.additional_special_tokens, resolve=True)
+        
+        print(f"Stored debug_enabled: {debug_enabled}")
+        
+        # config를 기본 Python 타입으로 변환
+        cfg_dict = OmegaConf.to_container(cfg, resolve=False)
+        print(f"After to_container debug.enabled: {cfg_dict.get('debug', {}).get('enabled', 'NOT_FOUND')}")
+        
+        # 중요 설정 값들 복원
+        cfg_dict['debug'] = {'enabled': debug_enabled}
+        print(f"After restoration debug.enabled: {cfg_dict['debug']['enabled']}")
         
         # 모든 random seed 설정
         setup_seeds(cfg.general.seed)
         
-        # output_dir 초기화 (debug 설정 포함)
-        cfg_dict['debug'] = {'enabled': debug_enabled}  # debug 설정 복원
+        # output_dir 초기화 전
+        print("\n=== Before WandB Init ===")
+        print(f"cfg_dict debug.enabled: {cfg_dict['debug']['enabled']}")
+        
+        # output_dir 초기화
         output_dir = init_wandb(cfg_dict)
         
-        print(f"Debug mode: {debug_enabled}")  # 디버그 모드 상태 출력
+        # wandb 초기화 후
+        print("\n=== After WandB Init ===")
+        if wandb.run is not None:
+            print(f"WandB config debug.enabled: {wandb.config.get('debug/enabled', 'NOT_FOUND')}")
+        
+        print(f"Debug mode: {debug_enabled}")
+        print(f"Special tokens: {special_tokens}")
+        
+        # wandb 설정 확인
+        if wandb.run is not None:
+            print("\n=== WandB Config Check ===")
+            print(f"Current WandB debug.enabled: {wandb.config.get('debug/enabled', 'NOT_FOUND')}")
+            # 명시적으로 다시 설정
+            wandb.config.update({"debug/enabled": debug_enabled}, allow_val_change=True)
+            print(f"After update WandB debug.enabled: {wandb.config.get('debug/enabled', 'NOT_FOUND')}")
         
         # Ensure data directory exists
         download_and_extract(cfg.url.data, cfg.general.data_path)
