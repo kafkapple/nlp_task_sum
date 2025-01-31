@@ -21,7 +21,7 @@ prompt_templates:
     system: |
       You are a Korean dialogue summarizer. Follow these rules:
       1. Summarize the dialogue in Korean only
-      2. Keep the summary concise and simple (100자 이내)
+      2. Keep the summary concise and simple 
       3. Do not include any English text
       4. Focus on the key points only
       5. Convert colloquial language into formal written language
@@ -70,7 +70,7 @@ prompt_templates:
       5. Keep the summary under 100 characters.
     few_shot:
       user: |
-        Following the instructions above, summarize the given document.
+        Following the instructions above, summarize the given document.  아래 대화를 위 예시들과 비슷한 스타일로 요약해주세요
         
         Dialogue:
         {sample_dialogue}

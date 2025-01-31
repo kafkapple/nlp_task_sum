@@ -61,7 +61,7 @@ prompt_templates:
       Summary:
 
 general:
-  seed: 42
+  seed: 2004
   timestamp: ${now:%Y%m%d_%H%M%S}
   data_path: "${hydra:runtime.cwd}/data"
   output_path: "outputs/${now:%Y%m%d_%H%M%S}"
@@ -75,9 +75,9 @@ prompt:
   version: "v2"
   n_samples: 100
   save_predictions: true
-  system: "You are a expert in the field of dialogue summarization..."
-  instruction: |
-    Following the instructions below...
+  # system: "You are a expert in the field of dialogue summarization..."
+  # instruction: |
+  #   Following the instructions below...
 
 inference:
   enabled: true
@@ -112,9 +112,12 @@ custom_config:
   inference: true
   few_shot: true
   n_few_shot_samples: 1
-  few_shot_selection: "baseline"
+  few_shot_selection: "similar_length"  # "max_len_summary", "min_max_len_summary", "idx", "baseline", "similar_length"
+  similar_length_selection:
+    enabled: true
+    n_candidates: 5  # 길이가 비슷한 상위 n개 중에서 선택
   n_val_samples: 100
-  temperature: 0.3
+  temperature: 0.8
   max_new_tokens: 150
   top_p: 0.8
   top_k: 50

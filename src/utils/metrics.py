@@ -1,5 +1,5 @@
 from rouge import Rouge
-from typing import Dict, List
+from typing import Dict, List, Tuple
 import wandb
 import numpy as np
 from transformers import PreTrainedTokenizerBase
@@ -85,6 +85,9 @@ class TrainerMetrics:
                         
                     scores = self.rouge.get_scores(pred, label)[0]
                     print(f"\nROUGE scores for sample {i}:")
+                    print("Raw scores from rouge library:")
+                    print(scores)
+                    print(f"Processed scores:")
                     print(f"ROUGE-1: {scores['rouge-1']['f']:.4f}")
                     print(f"ROUGE-2: {scores['rouge-2']['f']:.4f}")
                     print(f"ROUGE-L: {scores['rouge-l']['f']:.4f}")
@@ -130,6 +133,7 @@ class TrainerMetrics:
             
             print("\n=== ROUGE Scores ===")
             print(f"Number of valid samples: {len(df)}")
+            print("Raw metrics before wandb logging:")
             for k, v in metrics.items():
                 print(f"{k}: {v:.4f}")
             
@@ -163,6 +167,10 @@ class TrainerMetrics:
                         "eval/avg_prediction_length": df['prediction'].str.len().mean(),
                         "eval/avg_gold_length": df['gold_summary'].str.len().mean()
                     }
+                    print("\nMetrics being logged to wandb:")
+                    for k, v in wandb_metrics.items():
+                        if not k.startswith("predictions_table"):
+                            print(f"{k}: {v}")
                     wandb.log(wandb_metrics)
                     print("\nSuccessfully logged to wandb")
                 except Exception as e:
@@ -206,3 +214,40 @@ class TrainerMetrics:
                 text = text.replace(token, "")
         
         return text if text else "empty" 
+
+class MetricsCalculator:
+    def __init__(self):
+        self.rouge = Rouge()
+    
+    def compute_rouge_scores(self, 
+                           predictions: List[str], 
+                           references: List[str]) -> Tuple[pd.DataFrame, Dict[str, float]]:
+        """ROUGE 점수 계산"""
+        samples_data = []
+        
+        for i, (pred, ref) in enumerate(zip(predictions, references)):
+            try:
+                scores = self.rouge.get_scores(pred, ref)[0]
+                samples_data.append({
+                    'id': i,
+                    'prediction': pred,
+                    'reference': ref,
+                    'rouge1_f1': scores['rouge-1']['f'],
+                    'rouge2_f1': scores['rouge-2']['f'],
+                    'rougeL_f1': scores['rouge-l']['f']
+                })
+            except Exception as e:
+                print(f"Error calculating ROUGE for sample {i}: {e}")
+                
+        # DataFrame 생성
+        df = pd.DataFrame(samples_data)
+        
+        # 평균 점수 계산
+        metrics = {
+            'rouge1_f1': float(df['rouge1_f1'].mean()),
+            'rouge2_f1': float(df['rouge2_f1'].mean()),
+            'rougeL_f1': float(df['rougeL_f1'].mean()),
+            'rouge_avg': float(df[['rouge1_f1', 'rouge2_f1', 'rougeL_f1']].mean().mean())
+        }
+        
+        return df, metrics 

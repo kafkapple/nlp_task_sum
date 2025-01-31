@@ -98,17 +98,19 @@ class T5Summarizer(BaseModel):
         for idx, dialogue in enumerate(tqdm(dialogues, desc="Generating summaries")):
             # 프롬프트 생성
             prompt = self._build_prompt(
-                dialogue, 
-                sample_dialogue, 
-                sample_summary, 
-                prompt_version
+                dialogue=dialogue, 
+                sample_dialogue=sample_dialogue, 
+                sample_summary=sample_summary, 
+                prompt_version=self.cfg.prompt.version
             )
             
             # 첫 번째 대화의 프롬프트 출력
             if idx == 0:
                 print("\n=== Sample Prompt ===")
+                print("-" * 50)
                 print(prompt)
-                print("=== Token Length ===")
+                print("-" * 50)
+                print("\n=== Token Length ===")
                 print(f"Input tokens: {len(self.tokenizer.encode(dialogue))}")
                 if sample_dialogue:
                     print(f"Sample tokens: {len(self.tokenizer.encode(sample_dialogue))}")
@@ -158,55 +160,58 @@ class T5Summarizer(BaseModel):
         return summaries
 
     def _build_prompt(self, dialogue: str, sample_dialogue: str = None, 
-                     sample_summary: str = None, prompt_version: str = "v1") -> str:
-        """프롬프트 생성"""
-        # 템플릿 버전 선택
-        version = prompt_version.replace('v', '') if prompt_version else "1"
-        template = self.config.prompt_templates[version]
-        
-        # 프롬프트 생성
-        if sample_dialogue and sample_summary:
-            # few-shot 프롬프트
-            if version == "1":
-                prompt = template["few_shot"].format(
-                    sample_dialogue=sample_dialogue,
-                    sample_summary=sample_summary,
-                    dialogue=dialogue
-                )
-            else:  # version == "2"
-                prompt = (
-                    template["system"] + "\n" +
-                    template["instruction"] + "\n" +
-                    template["few_shot"]["user"].format(
-                        sample_dialogue=sample_dialogue
-                    ) + "\n" +
-                    template["few_shot"]["assistant"].format(
-                        sample_summary=sample_summary
-                    ) + "\n" +
-                    template["few_shot"]["final_user"].format(
-                        dialogue=dialogue
-                    )
-                )
-        else:
-            # zero-shot 프롬프트
-            if version == "1":
-                prompt = template["zero_shot"].format(dialogue=dialogue)
-            else:  # version == "2"
-                prompt = (
-                    template["system"] + "\n" +
-                    template["instruction"] + "\n" +
-                    template["zero_shot"].format(dialogue=dialogue)
-                )
-        
-        # 프롬프트 정보 출력
-        print("\n=== Prompt Information ===")
-        print(f"Template Version: {version}")
+                      sample_summary: str = None, prompt_version: str = "v1") -> str:
+        """Build prompt for the model based on the dialogue and sample data."""
+        print("\n=== Prompt Template Information ===")
+        print(f"Version: {prompt_version}")
         print(f"Mode: {'Few-shot' if sample_dialogue else 'Zero-shot'}")
-        print("\n=== Full Prompt ===")
-        print("-" * 50)
-        print(prompt)
-        print("-" * 50)
+        print(f"Few-shot enabled: {sample_dialogue and sample_summary}")
         
+        if prompt_version == "v1":
+            # Version 1: Original prompt template
+            if sample_dialogue and sample_summary:
+                print("\nFew-shot prompt template v1:")
+                prompt = f"다음은 대화문과 요약문의 예시입니다:\n대화문:\n{sample_dialogue}\n요약문:\n{sample_summary}\n\n이제 다음 대화문을 요약해주세요:\n대화문:\n{dialogue}"
+                print(f"\nSample dialogue:\n{sample_dialogue}")
+                print(f"\nSample summary:\n{sample_summary}")
+            else:
+                print("\nZero-shot prompt template v1:")
+                prompt = f"다음 대화문을 요약해주세요:\n대화문:\n{dialogue}"
+        else:
+            # Version 2: Enhanced prompt template
+            if sample_dialogue and sample_summary:
+                print("\nFew-shot prompt template v2:")
+                prompt = f"""다음은 대화문과 요약문의 예시입니다.
+예시를 잘 읽고 아래 대화문을 요약해주세요.
+
+[예시 대화문]
+{sample_dialogue}
+
+[예시 요약문]
+{sample_summary}
+
+이제 다음 대화문을 위 예시처럼 요약해주세요.
+100자 이내로 작성하고, 구어체는 문어체로 바꿔주세요.
+
+[대화문]
+{dialogue}
+
+[요약문]"""
+                print(f"\nSample dialogue:\n{sample_dialogue}")
+                print(f"\nSample summary:\n{sample_summary}")
+            else:
+                print("\nZero-shot prompt template v2:")
+                prompt = f"""다음 대화문을 요약해주세요.
+100자 이내로 작성하고, 구어체는 문어체로 바꿔주세요.
+
+[대화문]
+{dialogue}
+
+[요약문]"""
+
+        print(f"\nInput dialogue:\n{dialogue}")
+        print(f"\nFinal prompt:\n{prompt}")
+        print("===========================\n")
         return prompt
 
     def _freeze_layers(self, num_layers_to_train: int = 2):
